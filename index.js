@@ -8,7 +8,7 @@ const util = require("util");
 
 let Service, Characteristic;
 
-var protocol = "https";
+// var protocol = "https";
 var apibasepath = "/system_http_api/API_REV01";
 var hPath = "API_REV01";
 
@@ -38,7 +38,7 @@ var alarmStatus = {
   "Armed Night Alarm" : 4,
   "Armed Away Alarm"  : 4,
   "Not available"     : 5, // At certain times, tuxedo API returns a Not available value with a successful API response, not sure why this is, set accessory to general fault when this happens
-  "Error"             : 5, // Tuxedo api can be tempramental at times, when the API call fails, we set the accessory to general fault.
+  "Error"             : 5, // Tuxedo api can be temperamental at times, when the API call fails, we set the accessory to general fault.
 };
 
 module.exports = (homebridge) => {
@@ -60,10 +60,11 @@ function HoneywellTuxedoAccessory(log, config) {
   this.pollInterval = config.pollInterval || 30000;
 
   // extract name from config
-  this.name = config.name || "Honeywell Tuxedo Security";
+  this.name = config.name || "Honeywell Security";
 
   this.host = config.host;
   this.port = config.port || "";
+  this.protocol = config.protocol || "http";
 
   if (!config.alarmCode) {
     this.log("Alarm code is missing from config");

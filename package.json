@@ -1,6 +1,6 @@
 {
-  "name": "homebridge-honeywell-tuxedo-touch",
-  "version": "1.4.3",
+  "name": "homebridge-honeywell-tuxedo-touch-vk",
+  "version": "1.4.5",
   "description": "Homebridge plugin for the Honeywell Tuxedo Touch wifi security system",
   "main": "index.js",
   "scripts": {
@@ -13,10 +13,10 @@
     "Tuxedo",
     "Tuxedo Touch"
   ],
-  "author": "Ashish Shekhar",
+  "author": "Sparseman",
   "repository": {
     "type": "git",
-    "url": "git://github.com/lockpicker/homebridge-honeywell-tuxedo-touch.git"
+    "url": "git://github.com/sparsematrix/homebridge-honeywell-tuxedo-touch-vk.git"
   },
   "license": "GPL-3.0-or-later",
   "engines": {
@@ -33,7 +33,7 @@
   },
   "readmeFilename": "README.md",
   "bugs": {
-    "url": "https://github.com/lockpicker/homebridge-honeywell-tuxedo-touch/issues"
+    "url": "https://github.com/sparsematrix/homebridge-honeywell-tuxedo-touch-vk"
   },
   "watch": {
     "nodemon": "*.js"
