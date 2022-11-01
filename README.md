@@ -1,7 +1,13 @@
-# homebridge-honeywell-tuxedo-touch
-Homebridge plugin for the [Honeywell Tuxedo Touch Wifi security system](https://www.honeywellhome.com/us/en/products/security/security-systems/tuxwifiw-white-tuxedo-touch-7-in-graphic-touchscreen-tuxwifiw/).
+# homebridge-honeywell-tuxedo-touch-vk
+Homebridge plugin for the Honeywell Vista Automation Module.
 
-This plugin exposes the Honeywell Tuxedo Touch Wifi unit as a security system accessory in Homekit through [Homebridge](http://homebridge.io)
+This plugin exposes the Honeywell VAM Wifi unit as a security system accessory in Homekit through [Homebridge](http://homebridge.io)
+
+VAM is similar to Tuxedo but never made a strong presence and has been abandoned. This is a hacked up fork of a Tuxedo plugin
+to work with VAM v6.2.9. It relies on HTTP rather than HTTPS as VAM must use TLS 1.1 which has been obsoleted so virtually
+nothing will talk to it anymore. This means the Homebridge plugin must be on the same local network/VNET as the VAM unless
+you want to fight with a TLS proxy. Not all unused code has been removed because I built this for personal use and don't care
+at this time.
 
 ## Installation
 
