@@ -518,7 +518,7 @@ async function getAPIKeys() {
   try {
     var tuxApiUrl = protocol + "://" + this.host;
     if (this.port) tuxApiUrl += ":" + this.port;
-    tuxApiUrl += "/tuxedoapi.html";
+    tuxApiUrl += "/home.html";
 
     const gotCookieJar = new CookieJar();
 
