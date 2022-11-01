@@ -304,68 +304,32 @@ HoneywellTuxedoAccessory.prototype = {
   },
 };
 
-async function callAPI_POST(url, data, paramlength, headers, callback) {
-  const gotCookieJar = new CookieJar();
-  //const setCookie = promisify(cookieJar.setCookie.bind(cookieJar));
-
+// Not actually a POST on VAM, just GET with query params
+async function callAPI_POST(url, data, callback) {
   const options = {
-    method: "POST",
-    url: url,
-    headers: {
-      authtoken: headers,
-      identity: this.api_iv_enc,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: "param=" + data + "&len=" + paramlength + "&tstamp=" + Math.random(),
-    cookieJar: gotCookieJar,
-    https: {
-      rejectUnauthorized: false,
-    },
+    method: "GET",
+    url: url + "?" + data
   };
   if (this.debug)
     this.log(
       "[callAPI_POST]: Calling alarm API with url: " +
-        options.url +
-        " headers - authtoken: " +
-        options.headers["authtoken"] +
-        " headers-identity" +
-        options.headers["identity"] +
-        " body: " +
-        options.body
+        options.url
     );
 
   try {
-    var response = await got.post(options);
-    var respFinal;
-    var respJSON = JSON.parse(response.body);
+    var response = await got.get(options);
+    // Remove disclaimer HTML added by VAM
+    var respJSON = "";
     try {
-      respFinal = respJSON["Result"];
-    } catch (e) {
-      try {
-        respFinal = respJSON.Result;
-      } catch (e) {
-        respFinal = respJSON.toString();
-      }
+      respJSON = JSON.parse(response.body.substring(0, response.body.lastIndexOf("}") + 1));
+    } catch(e) {
+      this.log('Response was not JSON');
     }
-    // At this point, we have the result, so any callbacks can be executed
-    if (this.debug) this.log("[callAPI_POST] Trying to decrypt response: " + respFinal);
-    var decryptedData = decryptData.apply(this, [respFinal]);
-    //if (this.debug) this.log("[callAPI_POST] Response final decrypted: " + decryptedData);
 
+    this.log('[callAPI_POST]: Response: ' + response.body);
 
-    var statusString = JSON.parse(decryptedData).Status.toString().trim();
-    /* Tuxedo has an annoying bug, sometimes the unit disconnects from the router and upon reconnecting, the GET API call continuously returns a "Not available" status.
-     * This seems to fix itself when the homepage tuxedoapi.html is loaded on any browser
-     * hence as a hack, if we receive a Not available state, we will try to fetch api keys again which loads the tuxedoapi.html programmatically to resolve the issue
-     */
-    if(statusString == "Not available") {
-        this.log("[callAPI_POST] Received response 'Not available', applying tuxedo bug workaround, fetching api keys again, if successful this should resolve the problem in the next call");
-        (async () => {
-          await getAPIKeys.call(this);
-        })();
-    }
     // return data 
-    callback(decryptedData);
+    callback(respJSON);
     
   } catch (error) {
     if (this.debug) {
@@ -381,57 +345,39 @@ function getAlarmMode(callback) {
   var url = protocol + "://" + this.host;
   if (this.port != "") url += ":" + this.port;
   url += apibasepath + "/GetSecurityStatus";
-  var header = "MACID:Browser,Path:" + hPath + "/GetSecurityStatus";
+
   if (this.debug)
     this.log(
       "[getAlarmMode] About to call with, url: " +
-        url +
-        " header: " +
-        header +
-        " api_key_enc: " +
-        this.api_key_enc
+        url
     );
   callAPI_POST.apply(this, [
     url,
     "",
-    0,
-    CryptoJS.HmacSHA1(header, this.api_key_enc),
     callback,
   ]);
 }
 
 function armAlarm(mode, callback) {
   var pID = 1;
-  var dataCnt = encryptData.apply(this, [
-    "arming=" +
-      mode +
-      "&pID=" +
-      pID +
-      "&ucode=" +
+  var queryString =
+    "arming=" + mode + "&pID=" + pID + "&ucode=" +
       parseInt(this.uCode) +
-      "&operation=set",
-  ]);
+      "&operation=set";
   var url = protocol + "://" + this.host;
   if (this.port != "") url += ":" + this.port;
   url += apibasepath + "/AdvancedSecurity/ArmWithCode"; //?param=" + encryptData(dataCnt);
 
-  var header = "MACID:Browser,Path:" + hPath + "/AdvancedSecurity/ArmWithCode";
   if (this.debug)
     this.log(
       "[armAlarm] About to call API with, url:" +
         url +
-        " dataCnt: " +
-        dataCnt +
-        " header: " +
-        header +
-        " api_key_enc: " +
-        this.api_key_enc
+        " queryString: " +
+        queryString
     );
   callAPI_POST.apply(this, [
     url,
-    dataCnt,
-    dataCnt.length,
-    CryptoJS.HmacSHA1(header, this.api_key_enc),
+    queryString,
     finishArming,
   ]);
 
@@ -440,33 +386,24 @@ function armAlarm(mode, callback) {
   }
 }
 
+// VAM does not support DisarmWithCode API but can call the backend API used by the VAM's web interface. It does not have a JSON response
 function disarmAlarm(callback) {
   var pID = 1;
-  var dataCnt = encryptData.apply(this, [
-    "pID=" + pID + "&ucode=" + parseInt(this.uCode) + "&operation=set",
-  ]);
+  var queryString = "pID=" + pID + "&ucode=" + parseInt(this.uCode) + "&cmd=3&Type=3";
   var url = protocol + "://" + this.host;
   if (this.port != "") url += ":" + this.port;
-  url += apibasepath + "/AdvancedSecurity/DisarmWithCode"; //?param=" + encryptData(dataCnt);
+  url += "/handlerequest.html";
 
-  var header =
-    "MACID:Browser,Path:" + hPath + "/AdvancedSecurity/DisarmWithCode";
   if (this.debug)
     this.log(
       "[disarmAlarm] About to call API with, url:" +
         url +
-        " dataCnt: " +
-        dataCnt +
-        " header: " +
-        header +
-        " api_key_enc: " +
-        this.api_key_enc
+        " queryString: " +
+        queryString
     );
   callAPI_POST.apply(this, [
     url,
-    dataCnt,
-    dataCnt.length,
-    CryptoJS.HmacSHA1(header, this.api_key_enc),
+    queryString,
     finishDisarming,
   ]);
 
@@ -475,44 +412,13 @@ function disarmAlarm(callback) {
   }
 }
 
-function decryptData(data) {
-  var encrypted = {};
-  encrypted.ciphertext = CryptoJS.enc.Base64.parse(data);
-  var decrypted = CryptoJS.AES.decrypt(
-    encrypted,
-    CryptoJS.enc.Hex.parse(this.api_key_enc),
-    {
-      iv: CryptoJS.enc.Hex.parse(this.api_iv_enc),
-      salt: "",
-      mode: CryptoJS.mode.CBC,
-      padding: CryptoJS.pad.Pkcs7,
-    }
-  );
-  if (this.debug)
-    this.log(
-      "[decryptData] Returning: " + decrypted.toString(CryptoJS.enc.Latin1)
-    );
-  return decrypted.toString(CryptoJS.enc.Latin1);
-}
-
-function encryptData(data) {
-  var encString = CryptoJS.AES.encrypt(
-    data,
-    CryptoJS.enc.Hex.parse(this.api_key_enc),
-    {
-      iv: CryptoJS.enc.Hex.parse(this.api_iv_enc),
-      salt: "",
-      mode: CryptoJS.mode.CBC,
-      padding: CryptoJS.pad.Pkcs7,
-    }
-  );
-  return encodeURIComponent(encString);
-}
-
 // Get API Keys from the tuxedo unit
 // Create an API request with the cookie jar turned on
 
 async function getAPIKeys() {
+  this.log("[getAPIKeys] getAPIKeys called -- NO-OP for VAM");
+  return;
+
   // Create an API request with the cookie jar turned on
   if (this.debug) this.log("[getAPIKeys] getAPIKeys called");
   try {
