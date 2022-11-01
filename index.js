@@ -8,7 +8,7 @@ const util = require("util");
 
 let Service, Characteristic;
 
-// var protocol = "https";
+var protocol = "http";
 var apibasepath = "/system_http_api/API_REV01";
 var hPath = "API_REV01";
 
@@ -64,7 +64,7 @@ function HoneywellTuxedoAccessory(log, config) {
 
   this.host = config.host;
   this.port = config.port || "";
-  this.protocol = config.protocol || "http";
+  this.protocol = config.protocol;
 
   if (!config.alarmCode) {
     this.log("Alarm code is missing from config");
