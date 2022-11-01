@@ -45,7 +45,7 @@ module.exports = (homebridge) => {
   Service = homebridge.hap.Service;
   Characteristic = homebridge.hap.Characteristic;
   homebridge.registerAccessory(
-    "homebridge-honeywell-tuxedo-touch",
+    "homebridge-honeywell-tuxedo-touch-vk",
     "Honeywell Tuxedo Touch",
     HoneywellTuxedoAccessory
   );
