@@ -384,7 +384,7 @@ function armAlarm(mode, callback) {
 // VAM does not support DisarmWithCode API but can call the backend API used by the VAM's web interface. It does not have a JSON response
 function disarmAlarm(callback) {
   var pID = 1;
-  var queryString = "pID=" + pID + "&ucode=" + parseInt(this.uCode) + "&cmd=3&Type=3";
+  var queryString = "cmd=3&Type=3&pID=" + pID + "&uCode=" + parseInt(this.uCode);
   var url = protocol + "://" + this.host;
   if (this.port != "") url += ":" + this.port;
   url += "/handlerequest.html";
