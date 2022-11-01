@@ -319,17 +319,12 @@ async function callAPI_POST(url, data, callback) {
   try {
     var response = await got.get(options);
     // Remove disclaimer HTML added by VAM
-    var respJSON = "";
-    try {
-      respJSON = JSON.parse(response.body.substring(0, response.body.lastIndexOf("}") + 1));
-    } catch(e) {
-      this.log('Response was not JSON');
-    }
+    var respTrimmed = response.body.substring(0, response.body.lastIndexOf("}") + 1);
 
-    this.log('[callAPI_POST]: Response: ' + response.body);
+    this.log('[callAPI_POST]: Response: ' + respTrimmed);
 
     // return data 
-    callback(respJSON);
+    callback(respTrimmed);
     
   } catch (error) {
     if (this.debug) {
