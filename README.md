@@ -1,4 +1,4 @@
-# homebridge-honeywell-tuxedo-touch-vk
+# homebridge-honeywell-vam
 Homebridge plugin for the Honeywell Vista Automation Module.
 
 This plugin exposes the Honeywell VAM Wifi unit as a security system accessory in Homekit through [Homebridge](http://homebridge.io)
@@ -76,7 +76,6 @@ All options:
     "alarmCode": "1234",
     "polling": true,
     "pollInterval": 10000,
-    "fetchKeysBeforeEverySetCall" : false,
     "debug": false
   }
 ]
@@ -94,7 +93,6 @@ All options:
 - The **polling** is a boolean that specifies if the current state should be pulled on regular intervals or not.
   This is optional and defaults to false however using this is recommended as it will keep your Homekit status synced with the unit if the state changes outside of a Homekit operation.
 - **pollInterval** is a number which defines the poll interval in milliseconds. Defaults to 30000.
-- **fetchKeysBeforeEverySetCall** is currently an experimental optional parameter for units that potentially have a bug due to which the get api may return incorrect state. This may be corrected by re-fetching the API keys at the time the SET calls are being made. This should only be used if you're getting a state issue e.g. Alarm is armed in night mode but homekit is displaying off etc. When set to **true**, the plugin will re-fetch API keys before making a SET call.
 - The **debug** parameter is boolean and turns on debug messages.
 
 ## Troubleshooting tips
@@ -110,9 +108,5 @@ All options:
 - Why is this not a platform accessory and/or why does it not support the other devices controlled by tuxedo? <br>
   The tuxedo API has many bugs including a significant issue of not returning all devices controlled by the unit. The device api seems to only return the first device connected to the unit and not all. Given enough time and motivation, this can be achieved through the workaround of scraping the web interface.
 
-## Dev fuel
-
-<a href="https://www.buymeacoffee.com/lockpicker" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
-
 ## Credits
-I used the [homebridge-http-securitysystem](https://www.npmjs.com/package/homebridge-http-securitysystem) for a while, hacked together for my personal use which inspired me to create a specific plugin for the Tuxedo touch for the benefit of all.
+Forked from [https://github.com/lockpicker/homebridge-honeywell-tuxedo-touch](https://github.com/lockpicker/homebridge-honeywell-tuxedo-touch)
