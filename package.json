@@ -1,7 +1,7 @@
 {
-  "name": "homebridge-honeywell-tuxedo-touch-vk",
+  "name": "homebridge-honeywell-vam",
   "version": "1.4.5",
-  "description": "Homebridge plugin for the Honeywell Tuxedo Touch wifi security system",
+  "description": "Homebridge plugin for the Honeywell VAM wifi security system",
   "main": "index.js",
   "scripts": {
     "nodemon": "homebridge -I -D",
@@ -11,12 +11,14 @@
     "homebridge-plugin",
     "Honeywell",
     "Tuxedo",
-    "Tuxedo Touch"
+    "Tuxedo Touch",
+    "Vista Autmation Module",
+    "VAM"
   ],
-  "author": "Sparseman",
+  "author": "sparsematrix",
   "repository": {
     "type": "git",
-    "url": "git://github.com/sparsematrix/homebridge-honeywell-tuxedo-touch-vk.git"
+    "url": "git://github.com/sparsematrix/homebridge-honeywell-vam.git"
   },
   "license": "GPL-3.0-or-later",
   "engines": {
@@ -33,7 +35,7 @@
   },
   "readmeFilename": "README.md",
   "bugs": {
-    "url": "https://github.com/sparsematrix/homebridge-honeywell-tuxedo-touch-vk"
+    "url": "https://github.com/sparsematrix/homebridge-honeywell-vam"
   },
   "watch": {
     "nodemon": "*.js"
