@@ -15,8 +15,7 @@
         "host": "myalarm.ddns.net",
         "alarmCode": "1234",
         "polling": true,
-        "pollInterval": 10000,
-        "fetchKeysBeforeEverySetCall" : false,
+        "pollInterval": 10000,\
         "debug": false
       }
     ]
