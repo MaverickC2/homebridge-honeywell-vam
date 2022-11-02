@@ -12,7 +12,7 @@ at this time.
 ## Installation
 
 1. Install homebridge using: npm install -g homebridge
-2. Install homebridge-honeywell-tuxedo-touch using: npm install -g homebridge-honeywell-tuxedo-touch
+2. Install homebridge-honeywell-vam using: npm install https://github.com/sparsematrix/homebridge-honeywell-vam
 3. Update your configuration file. See sample-config.json in this repository for a sample.
 
 ## Features
