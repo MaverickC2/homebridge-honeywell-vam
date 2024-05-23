@@ -5,6 +5,8 @@ var HTMLParser = require("node-html-parser");
 var pollingtoevent = require("polling-to-event");
 const util = require("util");
 
+var self;
+
 let Service, Characteristic;
 
 var protocol = "http";
@@ -51,6 +53,7 @@ module.exports = (homebridge) => {
 };
 
 function HoneywellTuxedoAccessory(log, config) {
+  self = this;
   this.log = log;
   this.config = config;
   this.debug = config.debug || false;
@@ -72,6 +75,7 @@ function HoneywellTuxedoAccessory(log, config) {
 
   (async () => {
     await getAPIKeys.call(this);
+    this.init();
   })();
 
   // create a new Security System service
@@ -96,7 +100,6 @@ HoneywellTuxedoAccessory.prototype = {
    * Init method for regular polling of device state, fired after the api keys have been retrieved
    */
   init: function () {
-    var self = this;
 
     // Set up continuous polling if configured
     if (self.debug) self.log("[init] Polling is set to : " + self.polling);
@@ -172,7 +175,7 @@ HoneywellTuxedoAccessory.prototype = {
         getAPIKeys.bind(this);
       })();
     }
-    setInterval(tuxedoApiStateHack,300000);
+    setInterval(tuxedoApiStateHack,90000);
   },
   getServices: function () {
     if (this.debug) this.log("Get Services called");
@@ -446,8 +449,8 @@ async function getAPIKeys() {
       if (this.debug) this.log(error);
     }
     // On error, retry in some time
-    setTimeout(() => {
-      getAPIKeys.call(this);
-    }, 80000);
+    // setTimeout(() => {
+    //   getAPIKeys.call(this);
+    // }, 90000);
   }
 }
