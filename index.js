@@ -3,7 +3,6 @@ var got = require("got");
 var CryptoJS = require("crypto-js");
 var HTMLParser = require("node-html-parser");
 var pollingtoevent = require("polling-to-event");
-var { CookieJar } = require("tough-cookie");
 const util = require("util");
 
 let Service, Characteristic;
@@ -164,11 +163,11 @@ HoneywellTuxedoAccessory.prototype = {
         });
       });
     }
-    // Fetch API keys every 5 mins 
-    // This is to work around a bug in many Tuxedo units which periodically starts returning the wrong status
-    // until some page is fecthed in a browser, fetching keys again loads tuxedoapi.html which has the same affect
+    // Fetch API keys every 1.5 mins
+    // This is to work around a bug in many VAM units which periodically starts returning the wrong status
+    // until some page is fecthed in a browser
     function tuxedoApiStateHack() {
-      if(this.debug) this.log("[tuxedoApiStateHack] Re-fetching API keys");
+      if(this.debug) this.log("[tuxedoApiStateHack] Re-fetching home page");
       (async () => {
         getAPIKeys.bind(this);
       })();
@@ -411,24 +410,19 @@ function disarmAlarm(callback) {
 // Create an API request with the cookie jar turned on
 
 async function getAPIKeys() {
-  this.log("[getAPIKeys] getAPIKeys called -- NO-OP for VAM");
-  return;
 
-  // Create an API request with the cookie jar turned on
-  if (this.debug) this.log("[getAPIKeys] getAPIKeys called");
+  this.log("[getAPIKeys] getAPIKeys called");
   try {
     var tuxApiUrl = protocol + "://" + this.host;
     if (this.port) tuxApiUrl += ":" + this.port;
-    tuxApiUrl += "/home.html";
+    tuxApiUrl += "/redirect.html?url=home.html";
 
-    const gotCookieJar = new CookieJar();
 
     const options = {
       method: "GET",
       headers: {
-        "User-Agent": "homebridge",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
       },
-      cookieJar: gotCookieJar,
       https: {
         rejectUnauthorized: false,
       },
@@ -438,39 +432,11 @@ async function getAPIKeys() {
     if (this.debug)
       this.log("Options: " + util.inspect(options, false, null, true));
 
+    // Calling this seems sufficient to keep the status fresh, we don't need the result
     var response = await got(tuxApiUrl, options);
 
-    var root = HTMLParser.parse(response.body);
-    var readit = root.querySelector("#readit");
+    this.init();
 
-    if (readit) {
-      this.api_key_enc = readit
-        .getAttribute("value")
-        .toString()
-        .substr(0, 64);
-      this.api_iv_enc = readit
-        .getAttribute("value")
-        .toString()
-        .substr(64, 96);
-
-      if (this.debug) this.log("[getAPIKeys] Successfully retrieved keys");
-      this.init();
-    } else {
-      if (
-        root.querySelector("h1").structuredText ==
-        "Max Number Of Connections In Use.Please Try Again."
-      ) {
-        this.log(
-          "[getAPIKeys] Max tuxedo connections exceeded. Will retry in 3 mins."
-        );
-        
-        setTimeout(() => {
-          (async () => {
-            await getAPIKeys.call(this);
-          })();
-        }, 180000);
-      }
-    }
   } catch (error) {
     if (error.code == "EPROTO") {
       this.log(
@@ -484,6 +450,6 @@ async function getAPIKeys() {
     // On error, retry in some time
     setTimeout(() => {
       getAPIKeys.call(this);
-    }, 180000);
+    }, 80000);
   }
 }
