@@ -418,8 +418,7 @@ async function getAPIKeys() {
   try {
     var tuxApiUrl = protocol + "://" + this.host;
     if (this.port) tuxApiUrl += ":" + this.port;
-    tuxApiUrl += "/redirect.html?url=home.html";
-
+    tuxApiUrl += "/home.html";
 
     const options = {
       method: "GET",
