@@ -435,8 +435,6 @@ async function getAPIKeys() {
     // Calling this seems sufficient to keep the status fresh, we don't need the result
     var response = await got(tuxApiUrl, options);
 
-    this.init();
-
   } catch (error) {
     if (error.code == "EPROTO") {
       this.log(
