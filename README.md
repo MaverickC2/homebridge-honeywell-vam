@@ -12,7 +12,7 @@ at this time.
 ## Installation
 
 1. Install homebridge using: npm install -g homebridge
-2. Install homebridge-honeywell-vam using: npm install https://github.com/sparsematrix/homebridge-honeywell-vam
+2. Install homebridge-honeywell-vam using: npm install https://github.com/MaverickC2/homebridge-honeywell-vam
 3. Update your configuration file. See sample-config.json in this repository for a sample.
 
 ## Features
