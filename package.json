@@ -1,6 +1,6 @@
 {
   "name": "homebridge-honeywell-vam",
-  "version": "1.4.8",
+  "version": "1.5.0",
   "description": "Homebridge plugin for the Honeywell VAM wifi security system",
   "main": "index.js",
   "scripts": {
@@ -18,7 +18,7 @@
   "author": "sparsematrix",
   "repository": {
     "type": "git",
-    "url": "git://github.com/sparsematrix/homebridge-honeywell-vam.git"
+    "url": "git://github.com/MaverickC2/homebridge-honeywell-vam.git"
   },
   "license": "GPL-3.0-or-later",
   "engines": {
@@ -35,7 +35,7 @@
   },
   "readmeFilename": "README.md",
   "bugs": {
-    "url": "https://github.com/sparsematrix/homebridge-honeywell-vam"
+    "url": "https://github.com/MaverickC2/homebridge-honeywell-vam"
   },
   "watch": {
     "nodemon": "*.js"
