@@ -15,7 +15,7 @@
     "Vista Autmation Module",
     "VAM"
   ],
-  "author": "sparsematrix",
+  "author": "MaverickC2",
   "repository": {
     "type": "git",
     "url": "git://github.com/MaverickC2/homebridge-honeywell-vam.git"
