@@ -323,11 +323,8 @@ async function callAPI_POST(url, data, callback) {
     // Remove disclaimer HTML added by VAM
     var respTrimmed = response.body.substring(0, response.body.lastIndexOf("}") + 1);
 
-  if (this.debug)  
-    this.log('[callAPI_POST]: Response: ' + respTrimmed
-  );
+    this.log('[callAPI_POST]: Response: ' + respTrimmed);
 
-    
     // return data 
     callback(respTrimmed);
     
