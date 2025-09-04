@@ -1,6 +1,6 @@
 {
   "name": "homebridge-honeywell-vam",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Homebridge plugin for the Honeywell VAM wifi security system",
   "homepage": "https://github.com/MaverickC2/homebridge-honeywell-vam",
   "main": "index.js",
