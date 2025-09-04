@@ -229,11 +229,13 @@ HoneywellTuxedoAccessory.prototype = {
     if (/SECS REMAINING$/i.test(statusString)) {
       CurrentState = this.lastValidCurrentState ?? 3;
       if (this.debug) this.log(`[handleSecuritySystemCurrentStateGet] Arming countdown detected (${statusString}) - returning lastValidCurrentState: ${CurrentState}`);
+    }
     // Entry Delay Active: show last valid armed state (not triggered or disarmed)
-    } else if (statusString === "Entry Delay Active") {
+    else if (statusString === "Entry Delay Active") {
       CurrentState = this.lastValidCurrentState ?? 3;
       if (this.debug) this.log("[handleSecuritySystemCurrentStateGet] Entry Delay Active - returning lastValidCurrentState: " + CurrentState);
-    } else {
+    }
+    else {
       CurrentState =
         alarmStatus[statusString] === undefined ? 3 : alarmStatus[statusString];
       if (CurrentState != 5) {
