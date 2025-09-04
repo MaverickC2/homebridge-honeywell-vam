@@ -92,6 +92,12 @@ function HoneywellTuxedoAccessory(log, config) {
     .on("get", this.handleSecuritySystemTargetStateGet.bind(this))
     .on("set", this.handleSecuritySystemTargetStateSet.bind(this));
 
+  // Create a new Occupancy Sensor service for Entry Delay Active
+  this.EntryDelaySensor = new Service.OccupancySensor(this.name + " Entry Delay");
+  this.EntryDelaySensor
+    .getCharacteristic(Characteristic.OccupancyDetected)
+    .on("get", this.handleEntryDelayGet.bind(this));
+
   if (this.debug) this.log("Service creation complete");
 }
 
@@ -165,6 +171,25 @@ HoneywellTuxedoAccessory.prototype = {
           this.SecuritySystem.getCharacteristic(Characteristic.StatusFault).setValue(1)
         });
       });
+
+      // Add polling for Entry Delay Occupancy Sensor
+      var entryDelayEmitter = pollingtoevent(
+        function (done) {
+          getAlarmMode.apply(self, [value => {
+            var statusString = JSON.parse(value).Status.toString().trim();
+            done(null, statusString === "Entry Delay Active" ? 1 : 0);
+          }]);
+        },
+        { longpolling: true, interval: self.pollInterval }
+      );
+      entryDelayEmitter.on("longpoll", function (state) {
+        self.EntryDelaySensor
+          .getCharacteristic(Characteristic.OccupancyDetected)
+          .setValue(state);
+      });
+      entryDelayEmitter.on("error", function (err) {
+        self.log("Polling Entry Delay failed: ", err);
+      });
     }
     // Fetch API keys every 1.5 mins
     // This is to work around a bug in many VAM units which periodically starts returning the wrong status
@@ -179,7 +204,7 @@ HoneywellTuxedoAccessory.prototype = {
   },
   getServices: function () {
     if (this.debug) this.log("Get Services called");
-    if (!this.SecuritySystem) return [];
+    if (!this.SecuritySystem || !this.EntryDelaySensor) return [];
 
     const infoService = new Service.AccessoryInformation();
     infoService.setCharacteristic(
@@ -187,7 +212,7 @@ HoneywellTuxedoAccessory.prototype = {
       "Honeywell-Tuxedo"
     );
 
-    return [infoService, this.SecuritySystem];
+    return [infoService, this.SecuritySystem, this.EntryDelaySensor];
   },
   /**
    * Handle requests to get the current value of the "Security System Current State" characteristic
@@ -304,6 +329,20 @@ HoneywellTuxedoAccessory.prototype = {
     if (value == 2) armAlarm.apply(this, ["NIGHT", callback]);
     if (value == 3) disarmAlarm.apply(this, [callback]);
   },
+
+  /**
+   * Handle requests to get the current value of the Entry Delay Occupancy Sensor
+   */
+  handleEntryDelayGet: function (callback) {
+    getAlarmMode.apply(this, [value => {
+      var statusString = JSON.parse(value).Status.toString().trim();
+      if (statusString === "Entry Delay Active") {
+        callback(null, 1); // Occupancy detected
+      } else {
+        callback(null, 0); // Not detected
+      }
+    }]);
+  }
 };
 
 // Not actually a POST on VAM, just GET with query params
