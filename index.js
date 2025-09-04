@@ -38,8 +38,8 @@ var alarmStatus = {
   "Armed Stay Alarm"  : 4,
   "Armed Night Alarm" : 4,
   "Armed Away Alarm"  : 4,
-  "Not available"     : 5, // At certain times, tuxedo API returns a Not available value with a successful API response, not sure why this is, set accessory to general fault when this happens
-  "Error"             : 5, // Tuxedo api can be temperamental at times, when the API call fails, we set the accessory to general fault.
+  "Not available"     : 5,
+  "Error"             : 5,
 };
 
 module.exports = (homebridge) => {
@@ -225,8 +225,12 @@ HoneywellTuxedoAccessory.prototype = {
     getAlarmMode.apply(this, [function (value) {
       var statusString = JSON.parse(value).Status.toString().trim();
 
+      // Handle "XX SECS REMAINING" (arming countdown)
+      if (/SECS REMAINING$/i.test(statusString)) {
+        CurrentState = this.lastValidCurrentState ?? 3;
+        if (this.debug) this.log(`[handleSecuritySystemCurrentStateGet] Arming countdown detected (${statusString}) - returning lastValidCurrentState: ${CurrentState}`);
       // Entry Delay Active: show last valid armed state (not triggered or disarmed)
-      if (statusString === "Entry Delay Active") {
+      } else if (statusString === "Entry Delay Active") {
         CurrentState = this.lastValidCurrentState ?? 3;
         if (this.debug) this.log("[handleSecuritySystemCurrentStateGet] Entry Delay Active - returning lastValidCurrentState: " + CurrentState);
       } else {
@@ -236,7 +240,7 @@ HoneywellTuxedoAccessory.prototype = {
           this.lastValidCurrentState = CurrentState;
         } else {
           CurrentState = this.lastValidCurrentState ?? 3;
-          if(this.debug) this.log("[handleSecuritySystemCurrentStateGet] Current state was Not available / error, returning last known good state: " + this.lastValidCurrentState);
+          if(this.debug) this.log("[handleSecuritySystemCurrentStateGet] Not available/error, returning last known good state: " + this.lastValidCurrentState);
         }
       }
       if ((alarmStatus[statusString] === undefined) && (statusString.indexOf("Secs Remaining") == -1) && (statusString !== "Entry Delay Active")) {
@@ -259,7 +263,11 @@ HoneywellTuxedoAccessory.prototype = {
     getAlarmMode.apply(this, [function (value) {
       var statusString = JSON.parse(value).Status.toString().trim();
 
-      if (statusString === "Entry Delay Active") {
+      // Handle "XX SECS REMAINING" (arming countdown)
+      if (/SECS REMAINING$/i.test(statusString)) {
+        TargetState = this.lastTargetState;
+        if (this.debug) this.log(`[handleSecuritySystemTargetStateGet] Arming countdown detected (${statusString}) - returning lastTargetState: ${TargetState}`);
+      } else if (statusString === "Entry Delay Active") {
         TargetState = this.lastTargetState;
         if (this.debug) this.log("[handleSecuritySystemTargetStateGet] Entry Delay Active - returning lastTargetState: " + TargetState);
       } else if (statusString.indexOf("Secs Remaining") != -1) {
