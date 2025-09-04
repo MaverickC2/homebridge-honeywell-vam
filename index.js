@@ -94,6 +94,7 @@ function HoneywellTuxedoAccessory(log, config) {
 
   // Create a new Occupancy Sensor service for Entry Delay Active
   this.EntryDelaySensor = new Service.OccupancySensor("Entry Delay");
+  this.EntryDelaySensor.displayName = "Entry Delay";
   this.EntryDelaySensor
     .getCharacteristic(Characteristic.OccupancyDetected)
     .on("get", this.handleEntryDelayGet.bind(this));
