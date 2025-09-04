@@ -6,8 +6,7 @@ This plugin exposes the Honeywell VAM Wifi unit as a security system accessory i
 VAM is similar to Tuxedo but never made a strong presence and has been abandoned. This is a hacked up fork of a Tuxedo plugin
 to work with VAM v6.2.9. It relies on HTTP rather than HTTPS as VAM must use TLS 1.1 which has been obsoleted so virtually
 nothing will talk to it anymore. This means the Homebridge plugin must be on the same local network/VNET as the VAM unless
-you want to fight with a TLS proxy. Not all unused code has been removed because I built this for personal use and don't care
-at this time.
+you want to fight with a TLS proxy. Not all unused code has been removed because I built this for personal use.
 
 ## Installation
 
@@ -18,7 +17,7 @@ at this time.
 ## Features
 This plugin currently only supports the security system feature of the Honeywell Tuxedo Touch unit. It maps the following modes:
 <table style='align:center'>
-  <tr><td><b>Homekit Mode</b></td><td><b>Tuxedo Mode</b></td></tr>
+  <tr><td><b>Homekit Mode</b></td><td><b>VAM Mode</b></td></tr>
   <tr><td>Home </td><td>Stay</td></tr>
   <tr><td>Night </td><td>Night</td></tr>
   <tr><td>Away </td><td>Away</td></tr>
@@ -40,7 +39,7 @@ and the following tuxedo state mappings are applied:
   <tr><td>Ready To Arm</td><td>Off</td></tr>
   <tr><td>Not Ready</td><td>Off</td></tr>
   <tr><td>Not Ready Fault</td><td>Off</td></tr>
-  <tr><td>Entry Delay Active</td><td>Triggered</td></tr>
+  <tr><td>Entry Delay Active</td><td>Moved to an occupancy sensor</td></tr>
   <tr><td>Not Ready Alarm</td><td>Triggered</td></tr>
   <tr><td>Armed Stay Alarm</td><td>Triggered</td></tr>
   <tr><td>Armed Night Alarm</td><td>Triggered</td></tr>
