@@ -39,7 +39,7 @@ and the following tuxedo state mappings are applied:
   <tr><td>Ready To Arm</td><td>Off</td></tr>
   <tr><td>Not Ready</td><td>Off</td></tr>
   <tr><td>Not Ready Fault</td><td>Off</td></tr>
-  <tr><td>Entry Delay Active</td><td>Moved to an occupancy sensor in v1.5.3</td></tr>
+  <tr><td>Entry Delay Active</td><td>Moved to an occupancy sensor in v1.5.3 </td></tr>
   <tr><td>Not Ready Alarm</td><td>Triggered</td></tr>
   <tr><td>Armed Stay Alarm</td><td>Triggered</td></tr>
   <tr><td>Armed Night Alarm</td><td>Triggered</td></tr>
