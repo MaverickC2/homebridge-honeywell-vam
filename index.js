@@ -265,34 +265,33 @@ HoneywellTuxedoAccessory.prototype = {
 
       // Handle "XX SECS REMAINING" (arming countdown)
       if (/SECS REMAINING$/i.test(statusString)) {
-        TargetState = this.lastTargetState;
-        if (this.debug) this.log(`[handleSecuritySystemTargetStateGet] Arming countdown detected (${statusString}) - returning lastTargetState: ${TargetState}`);
-      } else if (statusString === "Entry Delay Active") {
-        TargetState = this.lastTargetState;
-        if (this.debug) this.log("[handleSecuritySystemTargetStateGet] Entry Delay Active - returning lastTargetState: " + TargetState);
-      } else if (statusString.indexOf("Secs Remaining") != -1) {
-        TargetState = this.lastTargetState;
-      } else {
-        TargetState =
-          alarmStatus[statusString] === undefined
-            ? 3
-            : alarmStatus[statusString];
-        // Homekit doesn't accept a targetState of 4 (triggered), when triggered, return lastTargetState
-        if((TargetState == 4) || (TargetState == 5)) TargetState = this.lastTargetState;
-        if(this.debug) this.log("[handleSecuritySystemTargetStateGet] Target state was: " + TargetState + " returning lastTargetState: " + this.lastTargetState); 
-      }
+  TargetState = this.lastTargetState;
+  if (this.debug) this.log(`[handleSecuritySystemTargetStateGet] Arming countdown detected (${statusString}) - returning lastTargetState: ${TargetState}`);
+} else if (statusString === "Entry Delay Active") {
+  TargetState = this.lastTargetState;
+  if (this.debug) this.log("[handleSecuritySystemTargetStateGet] Entry Delay Active - returning lastTargetState: " + TargetState);
+} else {
+  TargetState =
+    alarmStatus[statusString] === undefined
+      ? 3
+      : alarmStatus[statusString];
+  // Homekit doesn't accept a targetState of 4 (triggered), when triggered, return lastTargetState
+  if((TargetState == 4) || (TargetState == 5)) TargetState = this.lastTargetState;
+  if(this.debug) this.log("[handleSecuritySystemTargetStateGet] Target state was: " + TargetState + " returning lastTargetState: " + this.lastTargetState); 
+}
 
-      if (
-        (alarmStatus[statusString] === undefined) && 
-        (statusString.indexOf("Secs Remaining") == -1) &&
-        (statusString !== "Entry Delay Active")
-      ) {
-        this.log(
-          "[handleSecuritySystemTargetStateGet] Unknown alarm state: " +
-            statusString +
-            " please report this through a github issue to the developer"
-        );
-      }
+// Only log unknown state if not SECS REMAINING or Entry Delay Active:
+if (
+  (alarmStatus[statusString] === undefined) &&
+  !/SECS REMAINING$/i.test(statusString) &&
+  (statusString !== "Entry Delay Active")
+) {
+  this.log(
+    "[handleSecuritySystemTargetStateGet] Unknown alarm state: " +
+      statusString +
+      " please report this through a github issue to the developer"
+  );
+}
 
       if (this.debug)
         this.log(
