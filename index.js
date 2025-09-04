@@ -220,39 +220,44 @@ HoneywellTuxedoAccessory.prototype = {
    * Handle requests to get the current value of the "Security System Current State" characteristic
    */
   handleSecuritySystemCurrentStateGet: function (callback) {
-    if (this.debug) this.log("[handleSecuritySystemCurrentStateGet] GET");
+  if (this.debug) this.log("[handleSecuritySystemCurrentStateGet] GET");
 
-    getAlarmMode.apply(this, [function (value) {
-      var statusString = JSON.parse(value).Status.toString().trim();
+  getAlarmMode.apply(this, [function (value) {
+    var statusString = JSON.parse(value).Status.toString().trim();
 
-      // Handle "XX SECS REMAINING" (arming countdown)
-      if (/SECS REMAINING$/i.test(statusString)) {
-        CurrentState = this.lastValidCurrentState ?? 3;
-        if (this.debug) this.log(`[handleSecuritySystemCurrentStateGet] Arming countdown detected (${statusString}) - returning lastValidCurrentState: ${CurrentState}`);
-      // Entry Delay Active: show last valid armed state (not triggered or disarmed)
-      } else if (statusString === "Entry Delay Active") {
-        CurrentState = this.lastValidCurrentState ?? 3;
-        if (this.debug) this.log("[handleSecuritySystemCurrentStateGet] Entry Delay Active - returning lastValidCurrentState: " + CurrentState);
+    // Handle "XX SECS REMAINING" (arming countdown)
+    if (/SECS REMAINING$/i.test(statusString)) {
+      CurrentState = this.lastValidCurrentState ?? 3;
+      if (this.debug) this.log(`[handleSecuritySystemCurrentStateGet] Arming countdown detected (${statusString}) - returning lastValidCurrentState: ${CurrentState}`);
+    // Entry Delay Active: show last valid armed state (not triggered or disarmed)
+    } else if (statusString === "Entry Delay Active") {
+      CurrentState = this.lastValidCurrentState ?? 3;
+      if (this.debug) this.log("[handleSecuritySystemCurrentStateGet] Entry Delay Active - returning lastValidCurrentState: " + CurrentState);
+    } else {
+      CurrentState =
+        alarmStatus[statusString] === undefined ? 3 : alarmStatus[statusString];
+      if (CurrentState != 5) {
+        this.lastValidCurrentState = CurrentState;
       } else {
-        CurrentState =
-          alarmStatus[statusString] === undefined ? 3 : alarmStatus[statusString];
-        if (CurrentState != 5) {
-          this.lastValidCurrentState = CurrentState;
-        } else {
-          CurrentState = this.lastValidCurrentState ?? 3;
-          if(this.debug) this.log("[handleSecuritySystemCurrentStateGet] Not available/error, returning last known good state: " + this.lastValidCurrentState);
-        }
+        CurrentState = this.lastValidCurrentState ?? 3;
+        if(this.debug) this.log("[handleSecuritySystemCurrentStateGet] Not available/error, returning last known good state: " + this.lastValidCurrentState);
       }
-      if ((alarmStatus[statusString] === undefined) && (statusString.indexOf("Secs Remaining") == -1) && (statusString !== "Entry Delay Active")) {
-        this.log(
-          "[handleSecuritySystemCurrentStateGet] Unknown alarm state: " +
-            statusString +
-            " please report this through a github issue to the developer"
-        );
-      }
-      callback(null, CurrentState);
-    }.bind(this)]);
-  },
+    }
+    // Suppress logging for SECS REMAINING and Entry Delay Active
+    if (
+      (alarmStatus[statusString] === undefined) &&
+      !/SECS REMAINING$/i.test(statusString) &&
+      (statusString !== "Entry Delay Active")
+    ) {
+      this.log(
+        "[handleSecuritySystemCurrentStateGet] Unknown alarm state: " +
+          statusString +
+          " please report this through a github issue to the developer"
+      );
+    }
+    callback(null, CurrentState);
+  }.bind(this)]);
+},
 
   /**
    * Handle requests to get the current value of the "Security System Target State" characteristic
