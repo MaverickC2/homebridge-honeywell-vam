@@ -225,27 +225,29 @@ HoneywellTuxedoAccessory.prototype = {
   getAlarmMode.apply(this, [function (value) {
     var statusString = JSON.parse(value).Status.toString().trim();
 
-    // Handle "XX SECS REMAINING" (arming countdown)
+    // If arming countdown in progress ("XX SECS REMAINING")
     if (/SECS REMAINING$/i.test(statusString)) {
-      CurrentState = this.lastValidCurrentState ?? 3;
-      if (this.debug) this.log(`[handleSecuritySystemCurrentStateGet] Arming countdown detected (${statusString}) - returning lastValidCurrentState: ${CurrentState}`);
+      // Keep Current State at previous valid (likely Disarmed/Ready)
+      CurrentState = this.lastValidCurrentState ?? 3; // 3 = Disarmed
+      if (this.debug) this.log(`[CurrentState] Arming countdown: ${statusString}. Returning lastValidCurrentState: ${CurrentState}`);
     }
-    // Entry Delay Active: show last valid armed state (not triggered or disarmed)
+    // Entry Delay Active: show last valid armed state
     else if (statusString === "Entry Delay Active") {
       CurrentState = this.lastValidCurrentState ?? 3;
-      if (this.debug) this.log("[handleSecuritySystemCurrentStateGet] Entry Delay Active - returning lastValidCurrentState: " + CurrentState);
-    }
+      if (this.debug) this.log("[CurrentState] Entry Delay Active - returning lastValidCurrentState: " + CurrentState);
+    } 
+    // Armed/Disarmed/Other recognized states
     else {
-      CurrentState =
-        alarmStatus[statusString] === undefined ? 3 : alarmStatus[statusString];
+      // Map status to state, fallback to Disarmed
+      CurrentState = alarmStatus[statusString] === undefined ? 3 : alarmStatus[statusString];
       if (CurrentState != 5) {
         this.lastValidCurrentState = CurrentState;
       } else {
         CurrentState = this.lastValidCurrentState ?? 3;
-        if(this.debug) this.log("[handleSecuritySystemCurrentStateGet] Not available/error, returning last known good state: " + this.lastValidCurrentState);
+        if (this.debug) this.log("[CurrentState] Not available/error, returning last valid state: " + this.lastValidCurrentState);
       }
     }
-    // Suppress logging for SECS REMAINING and Entry Delay Active
+    // Only log unknown states if not countdown or entry delay
     if (
       (alarmStatus[statusString] === undefined) &&
       !/SECS REMAINING$/i.test(statusString) &&
@@ -259,7 +261,7 @@ HoneywellTuxedoAccessory.prototype = {
     }
     callback(null, CurrentState);
   }.bind(this)]);
-},
+}
 
   /**
    * Handle requests to get the current value of the "Security System Target State" characteristic
