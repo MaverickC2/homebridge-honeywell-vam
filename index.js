@@ -33,7 +33,7 @@ var alarmStatus = {
   "Ready To Arm"      : 3,
   "Not Ready"         : 3,
   "Not Ready Fault"   : 3,
-  "Entry Delay Active": 4,
+  // "Entry Delay Active" intentionally not mapped here, handled in logic
   "Not Ready Alarm"   : 4,
   "Armed Stay Alarm"  : 4,
   "Armed Night Alarm" : 4,
@@ -93,7 +93,7 @@ function HoneywellTuxedoAccessory(log, config) {
     .on("set", this.handleSecuritySystemTargetStateSet.bind(this));
 
   // Create a new Occupancy Sensor service for Entry Delay Active
-  this.EntryDelaySensor = new Service.OccupancySensor(this.name + " Entry Delay");
+  this.EntryDelaySensor = new Service.OccupancySensor("Entry Delay");
   this.EntryDelaySensor
     .getCharacteristic(Characteristic.OccupancyDetected)
     .on("get", this.handleEntryDelayGet.bind(this));
@@ -186,6 +186,7 @@ HoneywellTuxedoAccessory.prototype = {
         self.EntryDelaySensor
           .getCharacteristic(Characteristic.OccupancyDetected)
           .setValue(state);
+        if (self.debug) self.log("[EntryDelaySensor] Occupancy set to:", state);
       });
       entryDelayEmitter.on("error", function (err) {
         self.log("Polling Entry Delay failed: ", err);
@@ -218,46 +219,34 @@ HoneywellTuxedoAccessory.prototype = {
    * Handle requests to get the current value of the "Security System Current State" characteristic
    */
   handleSecuritySystemCurrentStateGet: function (callback) {
-    if (this.debug) this.log("[handleSecuritySystemCurrentStateGet] Triggered GET SecuritySystemCurrentState");
+    if (this.debug) this.log("[handleSecuritySystemCurrentStateGet] GET");
 
-    getAlarmMode.apply(this, [returnCurrentState.bind(this)]);
-
-    function returnCurrentState(value) {
+    getAlarmMode.apply(this, [function (value) {
       var statusString = JSON.parse(value).Status.toString().trim();
-      if (this.debug)
-        this.log(
-          "[returnCurrentState] Retrieved status string: " +
-            statusString +
-            ", alarmStatus is: " +
-            alarmStatus[statusString]
-        );
-      CurrentState =
-        alarmStatus[statusString] === undefined ? 3 : alarmStatus[statusString];
-      
-        // If we find a state that isn't defined in alarm status and it isn't a arming / delay state, report in the log
-        if ((alarmStatus[statusString] === undefined) && (statusString.indexOf("Secs Remaining") == -1)) {
-          this.log(
-            "[handleSecuritySystemCurrentStateGet] Unknown alarm state: " +
-              statusString +
-              " please report this through a github issue to the developer"
-          );
-        }
 
-      if (this.debug)
+      // Entry Delay Active: show last valid armed state (not triggered or disarmed)
+      if (statusString === "Entry Delay Active") {
+        CurrentState = this.lastValidCurrentState ?? 3;
+        if (this.debug) this.log("[handleSecuritySystemCurrentStateGet] Entry Delay Active - returning lastValidCurrentState: " + CurrentState);
+      } else {
+        CurrentState =
+          alarmStatus[statusString] === undefined ? 3 : alarmStatus[statusString];
+        if (CurrentState != 5) {
+          this.lastValidCurrentState = CurrentState;
+        } else {
+          CurrentState = this.lastValidCurrentState ?? 3;
+          if(this.debug) this.log("[handleSecuritySystemCurrentStateGet] Current state was Not available / error, returning last known good state: " + this.lastValidCurrentState);
+        }
+      }
+      if ((alarmStatus[statusString] === undefined) && (statusString.indexOf("Secs Remaining") == -1) && (statusString !== "Entry Delay Active")) {
         this.log(
-          "[returnCurrentState] Received value: " +
-            value +
-            ", corresponding current state: " +
-            CurrentState
+          "[handleSecuritySystemCurrentStateGet] Unknown alarm state: " +
+            statusString +
+            " please report this through a github issue to the developer"
         );
-      if (CurrentState != 5){
-        this.lastValidCurrentState = CurrentState;
-      }else{
-        CurrentState = this.lastValidCurrentState;
-        if(this.debug) this.log("[handleSecuritySystemCurrentStateGet] Current state was Not available / error, returning the last known good state: " + this.lastValidCurrentState);
       }
       callback(null, CurrentState);
-    }
+    }.bind(this)]);
   },
 
   /**
@@ -266,12 +255,13 @@ HoneywellTuxedoAccessory.prototype = {
   handleSecuritySystemTargetStateGet: function (callback) {
     if (this.debug) this.log("Triggered GET SecuritySystemTargetState");
 
-    getAlarmMode.apply(this, [returnTargetState.bind(this)]);
-
-    function returnTargetState(value) {
+    getAlarmMode.apply(this, [function (value) {
       var statusString = JSON.parse(value).Status.toString().trim();
 
-      if (statusString.indexOf("Secs Remaining") != -1) {
+      if (statusString === "Entry Delay Active") {
+        TargetState = this.lastTargetState;
+        if (this.debug) this.log("[handleSecuritySystemTargetStateGet] Entry Delay Active - returning lastTargetState: " + TargetState);
+      } else if (statusString.indexOf("Secs Remaining") != -1) {
         TargetState = this.lastTargetState;
       } else {
         TargetState =
@@ -285,7 +275,8 @@ HoneywellTuxedoAccessory.prototype = {
 
       if (
         (alarmStatus[statusString] === undefined) && 
-        (statusString.indexOf("Secs Remaining") == -1)
+        (statusString.indexOf("Secs Remaining") == -1) &&
+        (statusString !== "Entry Delay Active")
       ) {
         this.log(
           "[handleSecuritySystemTargetStateGet] Unknown alarm state: " +
@@ -303,7 +294,7 @@ HoneywellTuxedoAccessory.prototype = {
         );
 
       callback(null, TargetState);
-    }
+    }.bind(this)]);
   },
 
   /**
@@ -336,11 +327,7 @@ HoneywellTuxedoAccessory.prototype = {
   handleEntryDelayGet: function (callback) {
     getAlarmMode.apply(this, [value => {
       var statusString = JSON.parse(value).Status.toString().trim();
-      if (statusString === "Entry Delay Active") {
-        callback(null, 1); // Occupancy detected
-      } else {
-        callback(null, 0); // Not detected
-      }
+      callback(null, statusString === "Entry Delay Active" ? 1 : 0);
     }]);
   }
 };
