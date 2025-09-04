@@ -27,7 +27,7 @@ var alarmStatus = {
   "Armed Away Fault"  : 1,
   "Armed Night"       : 2,
   "Armed Instant"     : 2,
-  "Armed Instant Fault": 2, 
+  "Armed Instant Fault": 2,
   "Armed Night Fault" : 2,
   "Ready Fault"       : 3,
   "Ready To Arm"      : 3,
@@ -149,7 +149,7 @@ HoneywellTuxedoAccessory.prototype = {
                 if(self.debug) self.log("Received target state 4, setting target state to lastTargetState: " + self.lastTargetState);
                   self.SecuritySystem.getCharacteristic(config.characteristic).setValue(self.lastTargetState);
                 }else{
-                  self.lastTargetState = state;  
+                  self.lastTargetState = state;
                   self.SecuritySystem.getCharacteristic(config.characteristic).setValue(state);
                 }
             } else {
@@ -220,48 +220,48 @@ HoneywellTuxedoAccessory.prototype = {
    * Handle requests to get the current value of the "Security System Current State" characteristic
    */
   handleSecuritySystemCurrentStateGet: function (callback) {
-  if (this.debug) this.log("[handleSecuritySystemCurrentStateGet] GET");
+    if (this.debug) this.log("[handleSecuritySystemCurrentStateGet] GET");
 
-  getAlarmMode.apply(this, [function (value) {
-    var statusString = JSON.parse(value).Status.toString().trim();
+    getAlarmMode.apply(this, [function (value) {
+      var statusString = JSON.parse(value).Status.toString().trim();
 
-    // If arming countdown in progress ("XX SECS REMAINING")
-    if (/SECS REMAINING$/i.test(statusString)) {
-      // Keep Current State at previous valid (likely Disarmed/Ready)
-      CurrentState = this.lastValidCurrentState ?? 3; // 3 = Disarmed
-      if (this.debug) this.log(`[CurrentState] Arming countdown: ${statusString}. Returning lastValidCurrentState: ${CurrentState}`);
-    }
-    // Entry Delay Active: show last valid armed state
-    else if (statusString === "Entry Delay Active") {
-      CurrentState = this.lastValidCurrentState ?? 3;
-      if (this.debug) this.log("[CurrentState] Entry Delay Active - returning lastValidCurrentState: " + CurrentState);
-    } 
-    // Armed/Disarmed/Other recognized states
-    else {
-      // Map status to state, fallback to Disarmed
-      CurrentState = alarmStatus[statusString] === undefined ? 3 : alarmStatus[statusString];
-      if (CurrentState != 5) {
-        this.lastValidCurrentState = CurrentState;
-      } else {
-        CurrentState = this.lastValidCurrentState ?? 3;
-        if (this.debug) this.log("[CurrentState] Not available/error, returning last valid state: " + this.lastValidCurrentState);
+      // If arming countdown in progress ("XX SECS REMAINING")
+      if (/SECS REMAINING$/i.test(statusString)) {
+        // Keep Current State at previous valid (likely Disarmed/Ready)
+        CurrentState = this.lastValidCurrentState ?? 3; // 3 = Disarmed
+        if (this.debug) this.log(`[CurrentState] Arming countdown: ${statusString}. Returning lastValidCurrentState: ${CurrentState}`);
       }
-    }
-    // Only log unknown states if not countdown or entry delay
-    if (
-      (alarmStatus[statusString] === undefined) &&
-      !/SECS REMAINING$/i.test(statusString) &&
-      (statusString !== "Entry Delay Active")
-    ) {
-      this.log(
-        "[handleSecuritySystemCurrentStateGet] Unknown alarm state: " +
-          statusString +
-          " please report this through a github issue to the developer"
-      );
-    }
-    callback(null, CurrentState);
-  }.bind(this)]);
-}
+      // Entry Delay Active: show last valid armed state
+      else if (statusString === "Entry Delay Active") {
+        CurrentState = this.lastValidCurrentState ?? 3;
+        if (this.debug) this.log("[CurrentState] Entry Delay Active - returning lastValidCurrentState: " + CurrentState);
+      }
+      // Armed/Disarmed/Other recognized states
+      else {
+        // Map status to state, fallback to Disarmed
+        CurrentState = alarmStatus[statusString] === undefined ? 3 : alarmStatus[statusString];
+        if (CurrentState != 5) {
+          this.lastValidCurrentState = CurrentState;
+        } else {
+          CurrentState = this.lastValidCurrentState ?? 3;
+          if (this.debug) this.log("[CurrentState] Not available/error, returning last valid state: " + this.lastValidCurrentState);
+        }
+      }
+      // Only log unknown states if not countdown or entry delay
+      if (
+        (alarmStatus[statusString] === undefined) &&
+        !/SECS REMAINING$/i.test(statusString) &&
+        (statusString !== "Entry Delay Active")
+      ) {
+        this.log(
+          "[handleSecuritySystemCurrentStateGet] Unknown alarm state: " +
+            statusString +
+            " please report this through a github issue to the developer"
+        );
+      }
+      callback(null, CurrentState);
+    }.bind(this)]);
+  },
 
   /**
    * Handle requests to get the current value of the "Security System Target State" characteristic
@@ -274,33 +274,33 @@ HoneywellTuxedoAccessory.prototype = {
 
       // Handle "XX SECS REMAINING" (arming countdown)
       if (/SECS REMAINING$/i.test(statusString)) {
-  TargetState = this.lastTargetState;
-  if (this.debug) this.log(`[handleSecuritySystemTargetStateGet] Arming countdown detected (${statusString}) - returning lastTargetState: ${TargetState}`);
-} else if (statusString === "Entry Delay Active") {
-  TargetState = this.lastTargetState;
-  if (this.debug) this.log("[handleSecuritySystemTargetStateGet] Entry Delay Active - returning lastTargetState: " + TargetState);
-} else {
-  TargetState =
-    alarmStatus[statusString] === undefined
-      ? 3
-      : alarmStatus[statusString];
-  // Homekit doesn't accept a targetState of 4 (triggered), when triggered, return lastTargetState
-  if((TargetState == 4) || (TargetState == 5)) TargetState = this.lastTargetState;
-  if(this.debug) this.log("[handleSecuritySystemTargetStateGet] Target state was: " + TargetState + " returning lastTargetState: " + this.lastTargetState); 
-}
+        TargetState = this.lastTargetState;
+        if (this.debug) this.log(`[handleSecuritySystemTargetStateGet] Arming countdown detected (${statusString}) - returning lastTargetState: ${TargetState}`);
+      } else if (statusString === "Entry Delay Active") {
+        TargetState = this.lastTargetState;
+        if (this.debug) this.log("[handleSecuritySystemTargetStateGet] Entry Delay Active - returning lastTargetState: " + TargetState);
+      } else {
+        TargetState =
+          alarmStatus[statusString] === undefined
+            ? 3
+            : alarmStatus[statusString];
+        // Homekit doesn't accept a targetState of 4 (triggered), when triggered, return lastTargetState
+        if((TargetState == 4) || (TargetState == 5)) TargetState = this.lastTargetState;
+        if(this.debug) this.log("[handleSecuritySystemTargetStateGet] Target state was: " + TargetState + " returning lastTargetState: " + this.lastTargetState);
+      }
 
-// Only log unknown state if not SECS REMAINING or Entry Delay Active:
-if (
-  (alarmStatus[statusString] === undefined) &&
-  !/SECS REMAINING$/i.test(statusString) &&
-  (statusString !== "Entry Delay Active")
-) {
-  this.log(
-    "[handleSecuritySystemTargetStateGet] Unknown alarm state: " +
-      statusString +
-      " please report this through a github issue to the developer"
-  );
-}
+      // Only log unknown state if not SECS REMAINING or Entry Delay Active:
+      if (
+        (alarmStatus[statusString] === undefined) &&
+        !/SECS REMAINING$/i.test(statusString) &&
+        (statusString !== "Entry Delay Active")
+      ) {
+        this.log(
+          "[handleSecuritySystemTargetStateGet] Unknown alarm state: " +
+            statusString +
+            " please report this through a github issue to the developer"
+        );
+      }
 
       if (this.debug)
         this.log(
@@ -331,7 +331,7 @@ if (
     TargetState = value;
     //Capture the last target state if it isn't disarmed
     if(value != 3)
-    	this.lastTargetState = value;
+      this.lastTargetState = value;
     if (value == 0) armAlarm.apply(this, ["STAY", callback]);
     if (value == 1) armAlarm.apply(this, ["AWAY", callback]);
     if (value == 2) armAlarm.apply(this, ["NIGHT", callback]);
@@ -366,12 +366,12 @@ async function callAPI_POST(url, data, callback) {
     // Remove disclaimer HTML added by VAM
     var respTrimmed = response.body.substring(0, response.body.lastIndexOf("}") + 1);
 
-  if (this.debug)  
-    this.log('[callAPI_POST]: Response: ' + respTrimmed);
+    if (this.debug)
+      this.log('[callAPI_POST]: Response: ' + respTrimmed);
 
     // return data 
     callback(respTrimmed);
-    
+
   } catch (error) {
     if (this.debug) {
       this.log("[callAPI_POST] Error:", error);
