@@ -1,4 +1,4 @@
-# homebridge-honeywell-vam
+# homebridge-honeywell-vam 
 Homebridge plugin for the Honeywell Vista Automation Module.
 
 This plugin exposes the Honeywell VAM Wifi unit as a security system accessory in Homekit through [Homebridge](http://homebridge.io)
