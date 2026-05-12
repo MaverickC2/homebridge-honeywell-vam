@@ -1,6 +1,6 @@
 {
   "name": "homebridge-honeywell-vam",
-  "version": "1.5.4",
+  "version": "2.0.0",
   "description": "Homebridge plugin for the Honeywell VAM wifi security system",
   "homepage": "https://github.com/MaverickC2/homebridge-honeywell-vam",
   "main": "index.js",
@@ -13,12 +13,12 @@
     "Honeywell",
     "Tuxedo",
     "Tuxedo Touch",
-    "Vista Autmation Module",
+    "Vista Automation Module",
     "VAM"
   ],
   "author": {
-  "name": "MaverickC2",
-  "url": "https://github.com/MaverickC2"
+    "name": "MaverickC2",
+    "url": "https://github.com/MaverickC2"
   },
   "repository": {
     "type": "git",
@@ -26,20 +26,22 @@
   },
   "license": "GPL-3.0-or-later",
   "engines": {
-    "node": ">=10.17.0",
-    "homebridge": ">=0.4.8"
+    "node": ">=18.0.0",
+    "homebridge": ">=1.8.0"
+  },
+  "peerDependencies": {
+    "homebridge": ">=1.8.0"
   },
   "dependencies": {
-    "crypto-js": "^4.0.0",
     "got": "^11.5.2",
-    "node-html-parser": "^1.2.20",
-    "polling-to-event": "^2.1.0",
-    "tough-cookie": "^4.0.0",
-    "util": "^0.12.3"
+    "polling-to-event": "^2.1.0"
+  },
+  "devDependencies": {
+    "npm-watch": "^0.11.0"
   },
   "readmeFilename": "README.md",
   "bugs": {
-    "url": "https://github.com/MaverickC2/homebridge-honeywell-vam"
+    "url": "https://github.com/MaverickC2/homebridge-honeywell-vam/issues"
   },
   "watch": {
     "nodemon": "*.js"
