@@ -1,45 +1,32 @@
 "use strict";
 var got = require("got");
-var CryptoJS = require("crypto-js");
-var HTMLParser = require("node-html-parser");
 var pollingtoevent = require("polling-to-event");
-const util = require("util");
-
-var self;
 
 let Service, Characteristic;
 
 var protocol = "http";
 var apibasepath = "/system_http_api/API_REV01";
-var hPath = "API_REV01";
-
-let CurrentState = 3;
-let TargetState = 3;
-let lastTargetState = 3;
-let lastValidCurrentState = 3;
-var api_key_enc;
-var api_iv_enc;
 
 var alarmStatus = {
-  "Armed Stay"        : 0,
-  "Armed Stay Fault"  : 0,
-  "Armed Away"        : 1,
-  "Armed Away Fault"  : 1,
-  "Armed Night"       : 2,
-  "Armed Instant"     : 2,
+  "Armed Stay"         : 0,
+  "Armed Stay Fault"   : 0,
+  "Armed Away"         : 1,
+  "Armed Away Fault"   : 1,
+  "Armed Night"        : 2,
+  "Armed Instant"      : 2,
   "Armed Instant Fault": 2,
-  "Armed Night Fault" : 2,
-  "Ready Fault"       : 3,
-  "Ready To Arm"      : 3,
-  "Not Ready"         : 3,
-  "Not Ready Fault"   : 3,
+  "Armed Night Fault"  : 2,
+  "Ready Fault"        : 3,
+  "Ready To Arm"       : 3,
+  "Not Ready"          : 3,
+  "Not Ready Fault"    : 3,
   // "Entry Delay Active" intentionally not mapped here, handled in logic
-  "Not Ready Alarm"   : 4,
-  "Armed Stay Alarm"  : 4,
-  "Armed Night Alarm" : 4,
-  "Armed Away Alarm"  : 4,
-  "Not available"     : 5,
-  "Error"             : 5,
+  "Not Ready Alarm"    : 4,
+  "Armed Stay Alarm"   : 4,
+  "Armed Night Alarm"  : 4,
+  "Armed Away Alarm"   : 4,
+  "Not available"      : 5,
+  "Error"              : 5,
 };
 
 module.exports = (homebridge) => {
@@ -53,447 +40,519 @@ module.exports = (homebridge) => {
 };
 
 function HoneywellTuxedoAccessory(log, config) {
-  self = this;
   this.log = log;
   this.config = config;
   this.debug = config.debug || false;
   this.fetchKeysBeforeEverySetCall = config.fetchKeysBeforeEverySetCall || false;
   this.polling = config.polling || false;
   this.pollInterval = config.pollInterval || 30000;
+  this.keepaliveInterval = config.keepaliveInterval || 60000;
 
-  // extract name from config
+  // All mutable state lives on the instance — safe for multiple accessories
+  this.currentState = 3;
+  this.targetState = 3;
+  this.lastTargetState = 3;
+  this.lastValidCurrentState = 3;
+  this._keepaliveTimer = null;
+  this._keepaliveFaulted = false;
+
   this.name = config.name || "Honeywell Security";
-
   this.host = config.host;
   this.port = config.port || "";
-  this.protocol = config.protocol;
+  this.protocol = config.protocol || "http";
 
   if (!config.alarmCode) {
     this.log("Alarm code is missing from config");
   }
   this.uCode = config.alarmCode;
 
-  (async () => {
-    await getAPIKeys.call(this);
-    this.init();
-  })();
-
   // create a new Security System service
   this.SecuritySystem = new Service.SecuritySystem(this.name);
 
-  // create handlers for required characteristics
-  this.SecuritySystem.getCharacteristic(
-    Characteristic.SecuritySystemCurrentState
-  ).on("get", this.handleSecuritySystemCurrentStateGet.bind(this));
+  // Homebridge 2.0: use onGet/onSet (Promise-based) instead of deprecated .on("get"/"set")
+  this.SecuritySystem
+    .getCharacteristic(Characteristic.SecuritySystemCurrentState)
+    .onGet(this.handleSecuritySystemCurrentStateGet.bind(this));
 
-  this.SecuritySystem.getCharacteristic(
-    Characteristic.SecuritySystemTargetState
-  )
-    .on("get", this.handleSecuritySystemTargetStateGet.bind(this))
-    .on("set", this.handleSecuritySystemTargetStateSet.bind(this));
+  this.SecuritySystem
+    .getCharacteristic(Characteristic.SecuritySystemTargetState)
+    .onGet(this.handleSecuritySystemTargetStateGet.bind(this))
+    .onSet(this.handleSecuritySystemTargetStateSet.bind(this));
 
-  // Create a new Occupancy Sensor service for Entry Delay Active
+  // Occupancy Sensor for Entry Delay Active state
   this.EntryDelaySensor = new Service.OccupancySensor("Entry Delay");
   this.EntryDelaySensor.displayName = "Entry Delay";
   this.EntryDelaySensor
     .getCharacteristic(Characteristic.OccupancyDetected)
-    .on("get", this.handleEntryDelayGet.bind(this));
+    .onGet(this.handleEntryDelayGet.bind(this));
 
   if (this.debug) this.log("Service creation complete");
+
+  // Kick off async init after construction
+  (async () => {
+    await this._getAPIKeys();
+    this.init();
+  })();
 }
 
 HoneywellTuxedoAccessory.prototype = {
+
   /**
-   * Init method for regular polling of device state, fired after the api keys have been retrieved
+   * Init: start polling and keepalive after API keys have been retrieved.
    */
   init: function () {
+    if (this.debug) this.log("[init] Polling is set to: " + this.polling);
 
-    // Set up continuous polling if configured
-    if (self.debug) self.log("[init] Polling is set to : " + self.polling);
-    if (self.polling) {
-      self.log("Starting polling with an interval of %s ms", self.pollInterval);
+    if (this.polling) {
+      this.log("Starting polling with an interval of %s ms", this.pollInterval);
+
+      var self = this;
 
       var emitterConfig = [
         {
-          method: self.handleSecuritySystemCurrentStateGet.bind(this),
+          method: self.handleSecuritySystemCurrentStateGet.bind(self),
           property: "current state",
           characteristic: Characteristic.SecuritySystemCurrentState,
         },
         {
-          method: self.handleSecuritySystemTargetStateGet.bind(this),
+          method: self.handleSecuritySystemTargetStateGet.bind(self),
           property: "target state",
           characteristic: Characteristic.SecuritySystemTargetState,
         },
       ];
 
-      emitterConfig.forEach((config) => {
+      emitterConfig.forEach((cfg) => {
         var emitter = pollingtoevent(
           function (done) {
-            config.method(function (err, result) {
-              done(err, result);
-            });
+            // onGet handlers now return Promises; bridge them to the done callback
+            cfg.method()
+              .then((result) => done(null, result))
+              .catch((err) => done(err));
           },
           { longpolling: true, interval: self.pollInterval }
         );
 
         emitter.on("longpoll", function (state) {
-          if(state != 5){
-              self.log(
+          if (state != 5) {
+            self.log(
               "Polling noticed %s change to %s, notifying devices",
-              config.property,
+              cfg.property,
               state
-              );
-            if (config.property === "target state") {
-              if(state == 4){
-                // Homekit doesn't accept a triggered value for target state, hence set the targetstate to last known target state
-                if(self.debug) self.log("Received target state 4, setting target state to lastTargetState: " + self.lastTargetState);
-                  self.SecuritySystem.getCharacteristic(config.characteristic).setValue(self.lastTargetState);
-                }else{
-                  self.lastTargetState = state;
-                  self.SecuritySystem.getCharacteristic(config.characteristic).setValue(state);
-                }
+            );
+            if (cfg.property === "target state") {
+              if (state == 4) {
+                // HomeKit does not accept 4 (triggered) for target state
+                if (self.debug)
+                  self.log(
+                    "Received target state 4, setting target state to lastTargetState: " +
+                      self.lastTargetState
+                  );
+                self.SecuritySystem
+                  .getCharacteristic(cfg.characteristic)
+                  .updateValue(self.lastTargetState);
+              } else {
+                self.lastTargetState = state;
+                self.SecuritySystem
+                  .getCharacteristic(cfg.characteristic)
+                  .updateValue(state);
+              }
             } else {
-              self.SecuritySystem.getCharacteristic(config.characteristic).setValue(state);
+              self.SecuritySystem
+                .getCharacteristic(cfg.characteristic)
+                .updateValue(state);
             }
-            // Set Statusfault characteristic to no fault
-            self.SecuritySystem.getCharacteristic(Characteristic.StatusFault).setValue(0)
+            // Clear any status fault
+            self.SecuritySystem
+              .getCharacteristic(Characteristic.StatusFault)
+              .updateValue(0);
           } else {
-            // When state is 5, an error has been encountered, most common causes are unit not reachable due to internet issues or returning state as not available
-            // Set Statusfault characteristic to General Fault
-            self.SecuritySystem.getCharacteristic(Characteristic.StatusFault).setValue(1)
-            self.log("Security system state unavailable, setting state to fault")
+            // State 5 = error / not available
+            self.SecuritySystem
+              .getCharacteristic(Characteristic.StatusFault)
+              .updateValue(1);
+            self.log("Security system state unavailable, setting state to fault");
           }
-        }
-          );
+        });
 
         emitter.on("error", function (err) {
-          self.log("Polling of %s failed, error was %s", config.property, err);
-          // Set Statusfault characteristic to General Fault
-          this.SecuritySystem.getCharacteristic(Characteristic.StatusFault).setValue(1)
+          self.log("Polling of %s failed, error was %s", cfg.property, err);
+          self.SecuritySystem
+            .getCharacteristic(Characteristic.StatusFault)
+            .updateValue(1);
         });
       });
 
-      // Add polling for Entry Delay Occupancy Sensor
+      // Polling for Entry Delay occupancy sensor
       var entryDelayEmitter = pollingtoevent(
         function (done) {
-          getAlarmMode.apply(self, [value => {
-            var statusString = JSON.parse(value).Status.toString().trim();
-            done(null, statusString === "Entry Delay Active" ? 1 : 0);
-          }]);
+          self.handleEntryDelayGet()
+            .then((result) => done(null, result))
+            .catch((err) => done(err));
         },
         { longpolling: true, interval: self.pollInterval }
       );
       entryDelayEmitter.on("longpoll", function (state) {
         self.EntryDelaySensor
           .getCharacteristic(Characteristic.OccupancyDetected)
-          .setValue(state);
+          .updateValue(state);
         if (self.debug) self.log("[EntryDelaySensor] Occupancy set to:", state);
       });
       entryDelayEmitter.on("error", function (err) {
-        self.log("Polling Entry Delay failed: ", err);
+        self.log("Polling Entry Delay failed:", err);
       });
     }
-    // Fetch API keys every 1.5 mins
-    // This is to work around a bug in many VAM units which periodically starts returning the wrong status
-    // until some page is fecthed in a browser
-    function tuxedoApiStateHack() {
-      if(this.debug) this.log("[tuxedoApiStateHack] Re-fetching home page");
-      (async () => {
-        getAPIKeys.bind(this);
-      })();
-    }
-    setInterval(tuxedoApiStateHack,90000);
+
+    // Start built-in keepalive — replaces any external ping requirement
+    this.startKeepalive();
   },
+
   getServices: function () {
     if (this.debug) this.log("Get Services called");
     if (!this.SecuritySystem || !this.EntryDelaySensor) return [];
 
     const infoService = new Service.AccessoryInformation();
-    infoService.setCharacteristic(
-      Characteristic.Manufacturer,
-      "Honeywell-Tuxedo"
-    );
+    infoService.setCharacteristic(Characteristic.Manufacturer, "Honeywell-Tuxedo");
 
     return [infoService, this.SecuritySystem, this.EntryDelaySensor];
   },
+
+  // ---------------------------------------------------------------------------
+  // Characteristic handlers (async, Promise-based for Homebridge 2.0)
+  // ---------------------------------------------------------------------------
+
   /**
-   * Handle requests to get the current value of the "Security System Current State" characteristic
+   * GET SecuritySystemCurrentState
    */
-  handleSecuritySystemCurrentStateGet: function (callback) {
+  handleSecuritySystemCurrentStateGet: async function () {
     if (this.debug) this.log("[handleSecuritySystemCurrentStateGet] GET");
 
-    getAlarmMode.apply(this, [function (value) {
-      var statusString = JSON.parse(value).Status.toString().trim();
+    const value = await this._getAlarmMode();
+    const statusString = JSON.parse(value).Status.toString().trim();
+    let state;
 
-      // If arming countdown in progress ("XX SECS REMAINING")
-      if (/SECS REMAINING$/i.test(statusString)) {
-        // Keep Current State at previous valid (likely Disarmed/Ready)
-        CurrentState = this.lastValidCurrentState ?? 3; // 3 = Disarmed
-        if (this.debug) this.log(`[CurrentState] Arming countdown: ${statusString}. Returning lastValidCurrentState: ${CurrentState}`);
-      }
-      // Entry Delay Active: show last valid armed state
-      else if (statusString === "Entry Delay Active") {
-        CurrentState = this.lastValidCurrentState ?? 3;
-        if (this.debug) this.log("[CurrentState] Entry Delay Active - returning lastValidCurrentState: " + CurrentState);
-      }
-      // Armed/Disarmed/Other recognized states
-      else {
-        // Map status to state, fallback to Disarmed
-        CurrentState = alarmStatus[statusString] === undefined ? 3 : alarmStatus[statusString];
-        if (CurrentState != 5) {
-          this.lastValidCurrentState = CurrentState;
-        } else {
-          CurrentState = this.lastValidCurrentState ?? 3;
-          if (this.debug) this.log("[CurrentState] Not available/error, returning last valid state: " + this.lastValidCurrentState);
-        }
-      }
-      // Only log unknown states if not countdown or entry delay
-      if (
-        (alarmStatus[statusString] === undefined) &&
-        !/SECS REMAINING$/i.test(statusString) &&
-        (statusString !== "Entry Delay Active")
-      ) {
-        this.log(
-          "[handleSecuritySystemCurrentStateGet] Unknown alarm state: " +
-            statusString +
-            " please report this through a github issue to the developer"
-        );
-      }
-      callback(null, CurrentState);
-    }.bind(this)]);
-  },
-
-  /**
-   * Handle requests to get the current value of the "Security System Target State" characteristic
-   */
-  handleSecuritySystemTargetStateGet: function (callback) {
-    if (this.debug) this.log("Triggered GET SecuritySystemTargetState");
-
-    getAlarmMode.apply(this, [function (value) {
-      var statusString = JSON.parse(value).Status.toString().trim();
-
-      // Handle "XX SECS REMAINING" (arming countdown)
-      if (/SECS REMAINING$/i.test(statusString)) {
-        TargetState = this.lastTargetState;
-        if (this.debug) this.log(`[handleSecuritySystemTargetStateGet] Arming countdown detected (${statusString}) - returning lastTargetState: ${TargetState}`);
-      } else if (statusString === "Entry Delay Active") {
-        TargetState = this.lastTargetState;
-        if (this.debug) this.log("[handleSecuritySystemTargetStateGet] Entry Delay Active - returning lastTargetState: " + TargetState);
-      } else {
-        TargetState =
-          alarmStatus[statusString] === undefined
-            ? 3
-            : alarmStatus[statusString];
-        // Homekit doesn't accept a targetState of 4 (triggered), when triggered, return lastTargetState
-        if((TargetState == 4) || (TargetState == 5)) TargetState = this.lastTargetState;
-        if(this.debug) this.log("[handleSecuritySystemTargetStateGet] Target state was: " + TargetState + " returning lastTargetState: " + this.lastTargetState);
-      }
-
-      // Only log unknown state if not SECS REMAINING or Entry Delay Active:
-      if (
-        (alarmStatus[statusString] === undefined) &&
-        !/SECS REMAINING$/i.test(statusString) &&
-        (statusString !== "Entry Delay Active")
-      ) {
-        this.log(
-          "[handleSecuritySystemTargetStateGet] Unknown alarm state: " +
-            statusString +
-            " please report this through a github issue to the developer"
-        );
-      }
-
+    if (/SECS REMAINING$/i.test(statusString)) {
+      // Arming countdown in progress — return last known good state
+      state = this.lastValidCurrentState;
       if (this.debug)
         this.log(
-          "[returnTargetState] Received value: " +
-            value +
-            ", corresponding target state: " +
-            TargetState
+          `[CurrentState] Arming countdown: ${statusString}. Returning lastValidCurrentState: ${state}`
         );
-
-      callback(null, TargetState);
-    }.bind(this)]);
-  },
-
-  /**
-   * Handle requests to set the "Security System Target State" characteristic
-   */
-  handleSecuritySystemTargetStateSet: function (value, callback) {
-    if (this.debug)
-      this.log("[handleSecuritySystemTargetStateGet] Triggered SET SecuritySystemTargetState:" + value);
-
-    if (this.fetchKeysBeforeEverySetCall){
-      if(this.debug) this.log("[handleSecuritySystemCurrentStateGet] fetchKeysBeforeEverySetCall config is true, fetching API keys again");
-      (async () => {
-        await getAPIKeys.bind(this);
-      })();
-    }
-
-    TargetState = value;
-    //Capture the last target state if it isn't disarmed
-    if(value != 3)
-      this.lastTargetState = value;
-    if (value == 0) armAlarm.apply(this, ["STAY", callback]);
-    if (value == 1) armAlarm.apply(this, ["AWAY", callback]);
-    if (value == 2) armAlarm.apply(this, ["NIGHT", callback]);
-    if (value == 3) disarmAlarm.apply(this, [callback]);
-  },
-
-  /**
-   * Handle requests to get the current value of the Entry Delay Occupancy Sensor
-   */
-  handleEntryDelayGet: function (callback) {
-    getAlarmMode.apply(this, [value => {
-      var statusString = JSON.parse(value).Status.toString().trim();
-      callback(null, statusString === "Entry Delay Active" ? 1 : 0);
-    }]);
-  }
-};
-
-// Not actually a POST on VAM, just GET with query params
-async function callAPI_POST(url, data, callback) {
-  const options = {
-    method: "GET",
-    url: url + "?" + data
-  };
-  if (this.debug)
-    this.log(
-      "[callAPI_POST]: Calling alarm API with url: " +
-        options.url
-    );
-
-  try {
-    var response = await got.get(options);
-    // Remove disclaimer HTML added by VAM
-    var respTrimmed = response.body.substring(0, response.body.lastIndexOf("}") + 1);
-
-    if (this.debug)
-      this.log('[callAPI_POST]: Response: ' + respTrimmed);
-
-    // return data 
-    callback(respTrimmed);
-
-  } catch (error) {
-    if (this.debug) {
-      this.log("[callAPI_POST] Error:", error);
+    } else if (statusString === "Entry Delay Active") {
+      // Entry delay — return last valid armed state
+      state = this.lastValidCurrentState;
+      if (this.debug)
+        this.log(
+          "[CurrentState] Entry Delay Active - returning lastValidCurrentState: " + state
+        );
     } else {
-      this.log("[callAPI_POST] Error:" + error.message);
-      callback('{"Status":"Error"}'); //Return an error state, this is mapped to an invalid state 5 in the alarmStatus dict
+      state =
+        alarmStatus[statusString] === undefined ? 3 : alarmStatus[statusString];
+      if (state !== 5) {
+        this.lastValidCurrentState = state;
+      } else {
+        state = this.lastValidCurrentState;
+        if (this.debug)
+          this.log(
+            "[CurrentState] Not available/error, returning last valid state: " +
+              this.lastValidCurrentState
+          );
+      }
     }
-  }
-}
 
-function getAlarmMode(callback) {
-  var url = protocol + "://" + this.host;
-  if (this.port != "") url += ":" + this.port;
-  url += apibasepath + "/GetSecurityStatus";
-
-  if (this.debug)
-    this.log(
-      "[getAlarmMode] About to call with, url: " +
-        url
-    );
-  callAPI_POST.apply(this, [
-    url,
-    "",
-    callback,
-  ]);
-}
-
-function armAlarm(mode, callback) {
-  var pID = 1;
-  var queryString =
-    "arming=" + mode + "&pID=" + pID + "&ucode=" +
-      parseInt(this.uCode) +
-      "&operation=set";
-  var url = protocol + "://" + this.host;
-  if (this.port != "") url += ":" + this.port;
-  url += apibasepath + "/AdvancedSecurity/ArmWithCode"; //?param=" + encryptData(dataCnt);
-
-  if (this.debug)
-    this.log(
-      "[armAlarm] About to call API with, url:" +
-        url +
-        " queryString: " +
-        queryString
-    );
-  callAPI_POST.apply(this, [
-    url,
-    queryString,
-    finishArming,
-  ]);
-
-  function finishArming() {
-    callback(null);
-  }
-}
-
-// VAM does not support DisarmWithCode API but can call the backend API used by the VAM's web interface. It does not have a JSON response
-function disarmAlarm(callback) {
-  var pID = 1;
-  var queryString = "cmd=3&Type=3&pID=" + pID + "&uCode=" + parseInt(this.uCode);
-  var url = protocol + "://" + this.host;
-  if (this.port != "") url += ":" + this.port;
-  url += "/handlerequest.html";
-
-  if (this.debug)
-    this.log(
-      "[disarmAlarm] About to call API with, url:" +
-        url +
-        " queryString: " +
-        queryString
-    );
-  callAPI_POST.apply(this, [
-    url,
-    queryString,
-    finishDisarming,
-  ]);
-
-  function finishDisarming(value) {
-    callback(null);
-  }
-}
-
-// Get API Keys from the tuxedo unit
-// Create an API request with the cookie jar turned on
-
-async function getAPIKeys() {
-
-  this.log("[getAPIKeys] getAPIKeys called");
-  try {
-    var tuxApiUrl = protocol + "://" + this.host;
-    if (this.port) tuxApiUrl += ":" + this.port;
-    tuxApiUrl += "/home.html";
-
-    const options = {
-      method: "GET",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
-      },
-      https: {
-        rejectUnauthorized: false,
-      },
-    };
-
-    if (this.debug) this.log("About to call, URL: " + tuxApiUrl);
-    if (this.debug)
-      this.log("Options: " + util.inspect(options, false, null, true));
-
-    // Calling this seems sufficient to keep the status fresh, we don't need the result
-    var response = await got(tuxApiUrl, options);
-
-  } catch (error) {
-    if (error.code == "EPROTO") {
+    if (
+      alarmStatus[statusString] === undefined &&
+      !/SECS REMAINING$/i.test(statusString) &&
+      statusString !== "Entry Delay Active"
+    ) {
       this.log(
-        "[getAPIKeys] This likely an issue with strict openSSL configuration, see: https://github.com/lockpicker/homebridge-honeywell-tuxedo-touch/issues/1"
+        "[handleSecuritySystemCurrentStateGet] Unknown alarm state: " +
+          statusString +
+          " — please report this via a GitHub issue"
       );
-    } else {
-      this.log("[getAPIKeys] Error retrieving keys from the tuxedo unit. Please ensure 'Authentication for web server local access' is disabled on the tuxedo unit. Will retry in 3 mins.");
-
-      if (this.debug) this.log(error);
     }
-    // On error, retry in some time
-    // setTimeout(() => {
-    //   getAPIKeys.call(this);
-    // }, 90000);
-  }
-}
+
+    this.currentState = state;
+    return state;
+  },
+
+  /**
+   * GET SecuritySystemTargetState
+   */
+  handleSecuritySystemTargetStateGet: async function () {
+    if (this.debug) this.log("[handleSecuritySystemTargetStateGet] GET");
+
+    const value = await this._getAlarmMode();
+    const statusString = JSON.parse(value).Status.toString().trim();
+    let state;
+
+    if (/SECS REMAINING$/i.test(statusString)) {
+      state = this.lastTargetState;
+      if (this.debug)
+        this.log(
+          `[handleSecuritySystemTargetStateGet] Arming countdown (${statusString}) - returning lastTargetState: ${state}`
+        );
+    } else if (statusString === "Entry Delay Active") {
+      state = this.lastTargetState;
+      if (this.debug)
+        this.log(
+          "[handleSecuritySystemTargetStateGet] Entry Delay Active - returning lastTargetState: " +
+            state
+        );
+    } else {
+      state =
+        alarmStatus[statusString] === undefined ? 3 : alarmStatus[statusString];
+      // HomeKit does not accept target state 4 (triggered) or 5 (error)
+      if (state === 4 || state === 5) {
+        state = this.lastTargetState;
+      }
+    }
+
+    if (
+      alarmStatus[statusString] === undefined &&
+      !/SECS REMAINING$/i.test(statusString) &&
+      statusString !== "Entry Delay Active"
+    ) {
+      this.log(
+        "[handleSecuritySystemTargetStateGet] Unknown alarm state: " +
+          statusString +
+          " — please report this via a GitHub issue"
+      );
+    }
+
+    if (this.debug)
+      this.log(
+        "[handleSecuritySystemTargetStateGet] Returning target state: " + state
+      );
+
+    this.targetState = state;
+    return state;
+  },
+
+  /**
+   * SET SecuritySystemTargetState
+   */
+  handleSecuritySystemTargetStateSet: async function (value) {
+    if (this.debug)
+      this.log(
+        "[handleSecuritySystemTargetStateSet] Triggered SET SecuritySystemTargetState: " +
+          value
+      );
+
+    if (this.fetchKeysBeforeEverySetCall) {
+      if (this.debug)
+        this.log(
+          "[handleSecuritySystemTargetStateSet] fetchKeysBeforeEverySetCall is true, fetching API keys"
+        );
+      await this._getAPIKeys();
+    }
+
+    this.targetState = value;
+    if (value !== 3) this.lastTargetState = value;
+
+    if (value === 0) await this._armAlarm("STAY");
+    if (value === 1) await this._armAlarm("AWAY");
+    if (value === 2) await this._armAlarm("NIGHT");
+    if (value === 3) await this._disarmAlarm();
+  },
+
+  /**
+   * GET Entry Delay Occupancy
+   */
+  handleEntryDelayGet: async function () {
+    const value = await this._getAlarmMode();
+    const statusString = JSON.parse(value).Status.toString().trim();
+    return statusString === "Entry Delay Active" ? 1 : 0;
+  },
+
+  // ---------------------------------------------------------------------------
+  // Keepalive — pings the VAM unit on a timer so no external tool is needed
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Starts a recurring HTTP ping to the VAM home page.
+   *
+   * This serves two purposes:
+   *   1. Works around a VAM firmware bug where the status API returns stale
+   *      data until a browser-like request hits the unit.
+   *   2. Monitors connectivity and sets/clears StatusFault accordingly,
+   *      removing any need for an external ping/healthcheck tool.
+   *
+   * Interval is configurable via `keepaliveInterval` in config (ms, default 60000).
+   */
+  startKeepalive: function () {
+    const intervalMs = this.keepaliveInterval;
+    this.log("[Keepalive] Starting with interval " + intervalMs + "ms");
+
+    this._keepaliveTimer = setInterval(async () => {
+      try {
+        var url = protocol + "://" + this.host;
+        if (this.port) url += ":" + this.port;
+        url += "/home.html";
+
+        if (this.debug) this.log("[Keepalive] Pinging VAM at " + url);
+
+        await got(url, {
+          method: "GET",
+          timeout: { request: 5000 },
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+          },
+          https: { rejectUnauthorized: false },
+          retry: { limit: 0 }, // don't retry inside keepalive; just wait for next tick
+        });
+
+        if (this.debug) this.log("[Keepalive] VAM ping successful");
+
+        // If we were previously faulted due to connectivity, clear it now
+        if (this._keepaliveFaulted) {
+          this._keepaliveFaulted = false;
+          this.SecuritySystem
+            .getCharacteristic(Characteristic.StatusFault)
+            .updateValue(0);
+          this.log("[Keepalive] VAM connectivity restored, clearing fault");
+        }
+      } catch (error) {
+        this.log("[Keepalive] VAM unreachable: " + error.message);
+        if (!this._keepaliveFaulted) {
+          this._keepaliveFaulted = true;
+          this.SecuritySystem
+            .getCharacteristic(Characteristic.StatusFault)
+            .updateValue(1);
+        }
+      }
+    }, intervalMs);
+  },
+
+  /**
+   * Stops the keepalive timer. Called automatically on Homebridge shutdown.
+   */
+  stopKeepalive: function () {
+    if (this._keepaliveTimer) {
+      clearInterval(this._keepaliveTimer);
+      this._keepaliveTimer = null;
+      this.log("[Keepalive] Stopped");
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // Internal API helpers (all Promise-based)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Fetches the current alarm status from the VAM unit.
+   * Returns the raw JSON string e.g. '{"Status":"Ready To Arm"}'
+   */
+  _getAlarmMode: async function () {
+    var url = protocol + "://" + this.host;
+    if (this.port !== "") url += ":" + this.port;
+    url += apibasepath + "/GetSecurityStatus";
+
+    if (this.debug) this.log("[_getAlarmMode] Calling: " + url);
+    return this._callAPI(url, "");
+  },
+
+  /**
+   * Arms the alarm in the given mode: STAY | AWAY | NIGHT
+   */
+  _armAlarm: async function (mode) {
+    var pID = 1;
+    var queryString =
+      "arming=" + mode +
+      "&pID=" + pID +
+      "&ucode=" + parseInt(this.uCode) +
+      "&operation=set";
+    var url = protocol + "://" + this.host;
+    if (this.port !== "") url += ":" + this.port;
+    url += apibasepath + "/AdvancedSecurity/ArmWithCode";
+
+    if (this.debug)
+      this.log("[_armAlarm] Calling: " + url + " query: " + queryString);
+
+    await this._callAPI(url, queryString);
+  },
+
+  /**
+   * Disarms the alarm.
+   * VAM does not expose a DisarmWithCode API endpoint; we call the internal
+   * web interface handler that the VAM's own UI uses.
+   */
+  _disarmAlarm: async function () {
+    var pID = 1;
+    var queryString =
+      "cmd=3&Type=3&pID=" + pID + "&uCode=" + parseInt(this.uCode);
+    var url = protocol + "://" + this.host;
+    if (this.port !== "") url += ":" + this.port;
+    url += "/handlerequest.html";
+
+    if (this.debug)
+      this.log("[_disarmAlarm] Calling: " + url + " query: " + queryString);
+
+    await this._callAPI(url, queryString);
+  },
+
+  /**
+   * Core HTTP GET wrapper.
+   * The VAM API uses GET with query params for all "POST-like" operations.
+   * Throws on network/HTTP error so callers can handle via try/catch or
+   * HomeKit's HapStatusError.
+   */
+  _callAPI: async function (url, data) {
+    const fullUrl = data ? url + "?" + data : url;
+
+    if (this.debug) this.log("[_callAPI] Requesting: " + fullUrl);
+
+    try {
+      const response = await got.get(fullUrl, {
+        https: { rejectUnauthorized: false },
+      });
+
+      // The VAM appends a disclaimer HTML block after the JSON — strip it
+      const body = response.body;
+      const trimmed = body.substring(0, body.lastIndexOf("}") + 1);
+
+      if (this.debug) this.log("[_callAPI] Response: " + trimmed);
+      return trimmed;
+    } catch (error) {
+      this.log("[_callAPI] Error: " + error.message);
+      if (this.debug) this.log(error);
+      // Return a sentinel so state handlers degrade gracefully
+      return '{"Status":"Error"}';
+    }
+  },
+
+  /**
+   * Fetches the VAM home page to refresh internal state.
+   * This is also the keepalive mechanism — see startKeepalive().
+   */
+  _getAPIKeys: async function () {
+    this.log("[_getAPIKeys] Refreshing VAM session");
+    try {
+      var url = protocol + "://" + this.host;
+      if (this.port) url += ":" + this.port;
+      url += "/home.html";
+
+      if (this.debug) this.log("[_getAPIKeys] Fetching: " + url);
+
+      await got(url, {
+        method: "GET",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+        },
+        https: { rejectUnauthorized: false },
+      });
+    } catch (error) {
+      if (error.code === "EPROTO") {
+        this.log(
+          "[_getAPIKeys] OpenSSL protocol error — see: https://github.com/lockpicker/homebridge-honeywell-tuxedo-touch/issues/1"
+        );
+      } else {
+        this.log(
+          "[_getAPIKeys] Could not reach VAM unit. Ensure 'Authentication for web server local access' is disabled on the unit."
+        );
+        if (this.debug) this.log(error);
+      }
+    }
+  },
+};
