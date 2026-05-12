@@ -1,111 +1,174 @@
-# homebridge-honeywell-vam 
+# homebridge-honeywell-vam
 Homebridge plugin for the Honeywell Vista Automation Module.
 
-This plugin exposes the Honeywell VAM Wifi unit as a security system accessory in Homekit through [Homebridge](http://homebridge.io)
+This plugin exposes the Honeywell VAM Wi-Fi unit as a security system accessory in HomeKit through [Homebridge](http://homebridge.io).
 
-VAM is similar to Tuxedo but never made a strong presence and has been abandoned. This is a hacked up fork of a Tuxedo plugin
-to work with VAM v6.2.9. It relies on HTTP rather than HTTPS as VAM must use TLS 1.1 which has been obsoleted so virtually
-nothing will talk to it anymore. This means the Homebridge plugin must be on the same local network/VNET as the VAM unless
-you want to fight with a TLS proxy. Not all unused code has been removed because I built this for personal use.
+VAM is similar to Tuxedo but never made a strong presence and has been abandoned. This is a fork of a Tuxedo plugin adapted to work with VAM v6.2.9. It relies on HTTP rather than HTTPS as VAM uses TLS 1.1, which has been obsoleted and is no longer supported by modern software. This means the Homebridge instance must be on the same local network as the VAM unit unless you set up a TLS-terminating proxy.
+
+> **v2.0.0** — Homebridge 2.0 compatible. Requires Node.js 18+ and Homebridge 1.8+. See [Upgrading from v1.x](#upgrading-from-v1x) below.
+
+---
 
 ## Installation
 
-1. Install homebridge using: npm install -g homebridge
-2. Install homebridge-honeywell-vam using: npm install https://github.com/MaverickC2/homebridge-honeywell-vam
-3. Update your configuration file. See sample-config.json in this repository for a sample.
+1. Install Homebridge: `npm install -g homebridge`
+2. Install this plugin: `npm install https://github.com/MaverickC2/homebridge-honeywell-vam`
+3. Update your configuration file. See the [Configuration](#configuration) section below or `sample-config.json` in this repository.
+
+> **Prerequisite:** Disable **"Authentication for web server local access"** on the VAM unit under Settings → Accounts. The plugin cannot communicate with the unit without this disabled.
+
+---
 
 ## Features
-This plugin currently only supports the security system feature of the Honeywell Tuxedo Touch unit. It maps the following modes:
-<table style='align:center'>
-  <tr><td><b>Homekit Mode</b></td><td><b>VAM Mode</b></td></tr>
-  <tr><td>Home </td><td>Stay</td></tr>
-  <tr><td>Night </td><td>Night</td></tr>
-  <tr><td>Away </td><td>Away</td></tr>
-  <tr><td>Off </td><td>Disarm</td></tr>
-</table>
 
-and the following tuxedo state mappings are applied:
-<table style='align:center'>
-  <tr><td><b>Tuxedo State</b></td><td><b>Homekit security state</b></td></tr>
-  <tr><td>Armed Stay</td><td>Stay</td></tr>
-  <tr><td>Armed Stay Fault</td><td>Stay</td></tr>
-  <tr><td>Armed Away</td><td>Away</td></tr>
-  <tr><td>Armed Away Fault</td><td>Away</td></tr>
-  <tr><td>Armed Night</td><td>Night</td></tr>
-  <tr><td>Armed Night Fault</td><td>Night</td></tr>
-  <tr><td>Armed Instant</td><td>Night</td></tr>
-  <tr><td>Armed Instant Fault</td><td>Night</td></tr>
-  <tr><td>Ready Fault</td><td>Off</td></tr>
-  <tr><td>Ready To Arm</td><td>Off</td></tr>
-  <tr><td>Not Ready</td><td>Off</td></tr>
-  <tr><td>Not Ready Fault</td><td>Off</td></tr>
-  <tr><td>Entry Delay Active</td><td>Moved to an occupancy sensor in v1.5.3 </td></tr>
-  <tr><td>Not Ready Alarm</td><td>Triggered</td></tr>
-  <tr><td>Armed Stay Alarm</td><td>Triggered</td></tr>
-  <tr><td>Armed Night Alarm</td><td>Triggered</td></tr>
-  <tr><td>Armed Away Alarm</td><td>Triggered</td></tr>
-</table>
+This plugin exposes two HomeKit accessories:
 
-There is no available comprehensive list of states documented for the Tuxedo unit so this is compiled based on everything we've seen so far. If the plugin detects a mode not in the list, it will result in disarming the system as assuming any other state will result in a false alarm condition. This will also be logged in the logs. If this happens, please raise a bug through github and the state will be added to the mapping for appropriate handling.
+- **Security System** — supports Stay, Night, Away, and Disarm modes.
+- **Occupancy Sensor ("Entry Delay")** — turns on when the VAM reports an active entry delay countdown, giving you automation triggers for that window.
 
+### Mode Mapping
+
+| HomeKit Mode | VAM Mode |
+|---|---|
+| Home | Stay |
+| Night | Night |
+| Away | Away |
+| Off | Disarm |
+
+### State Mapping
+
+| VAM State | HomeKit State |
+|---|---|
+| Armed Stay | Stay |
+| Armed Stay Fault | Stay |
+| Armed Away | Away |
+| Armed Away Fault | Away |
+| Armed Night | Night |
+| Armed Night Fault | Night |
+| Armed Instant | Night |
+| Armed Instant Fault | Night |
+| Ready To Arm | Off |
+| Ready Fault | Off |
+| Not Ready | Off |
+| Not Ready Fault | Off |
+| Entry Delay Active | Occupancy Sensor (On) |
+| Not Ready Alarm | Triggered |
+| Armed Stay Alarm | Triggered |
+| Armed Night Alarm | Triggered |
+| Armed Away Alarm | Triggered |
+
+There is no comprehensive official state list for the VAM unit; this table is compiled from observed states. If the plugin encounters an unknown state it will default to **Disarmed** to avoid a false alarm condition, and log the unknown state. If this happens please [open a GitHub issue](https://github.com/MaverickC2/homebridge-honeywell-vam/issues) so the state can be added to the mapping.
+
+### Built-in Keepalive
+
+The plugin pings the VAM unit on a configurable interval (default: every 60 seconds). This serves two purposes:
+
+1. **Works around a VAM firmware bug** where the status API starts returning stale data until a browser-like HTTP request is made to the unit — no external ping tool or cron job needed.
+2. **Monitors connectivity** — if the VAM unit becomes unreachable, the HomeKit accessory's Status Fault characteristic is set automatically and cleared when connectivity is restored.
+
+---
 
 ## Configuration
-The configuration options are the following:
 
-Minimum options:
-```
+### Minimum configuration
+
+```json
 "accessories": [
   {
     "accessory": "Honeywell Tuxedo Touch",
-    "host": "myalarm.ddns.net",
+    "host": "192.168.1.100",
     "alarmCode": "1234"
   }
 ]
-
 ```
 
-All options:
-```
+### All options
+
+```json
 "accessories": [
   {
-    "name": "Home Security",
     "accessory": "Honeywell Tuxedo Touch",
-    "host": "myalarm.ddns.net",
+    "name": "Home Security",
+    "host": "192.168.1.100",
     "port": "8000",
     "alarmCode": "1234",
     "polling": true,
     "pollInterval": 10000,
+    "keepaliveInterval": 60000,
+    "fetchKeysBeforeEverySetCall": false,
     "debug": false
   }
 ]
-
 ```
 
-- The **name** parameter is optional and determines the name of the security system you will see in HomeKit.
-- The **accessory** parameter tells Homebridge which plugin to load for this accessory. Leave this exactly as described in the example config.
-- The **host** parameter accepts the ip address or the hostname of the Tuxedo touch unit.
-  Whilst the IP address can be the local LAN ip of the unit, the tuxedo touch unit is sometimes unresponsive when accessed through the lan ip, it seems a lot more reliable when accessed through the WAN interface.
-  If you have a static ip which exposes the unit, you can use that, if not, setup a dynamic dns, expose your tuxedo unit through that and use it with this plugin.
-  Though note that **if your local LAN IP works reliably, that should be your first preference**.
-- The **port** parameter is optional and accepts the port number of the host on which the Tuxedo touch unit is available. The tuxedo API only responds over the https port(443), so if you're using port forwarding, remember to use the port that forwards to 443 on the tuxedo unit.
-- The **alarmCode** parameter accepts your security alarm code for arming and disarming the security system.
-- The **polling** is a boolean that specifies if the current state should be pulled on regular intervals or not.
-  This is optional and defaults to false however using this is recommended as it will keep your Homekit status synced with the unit if the state changes outside of a Homekit operation.
-- **pollInterval** is a number which defines the poll interval in milliseconds. Defaults to 30000.
-- The **debug** parameter is boolean and turns on debug messages.
+### Option reference
 
-## Troubleshooting tips
-- Make sure to disable "Authentication for web server local access" from the accounts screen under settings on the tuxedo unit.
-- If the alarm disarms itself without any operation from the user(s), check to see if your tuxedo unit is displaying a state which isn'tn in the state mapping provided above and report that through an issue on github. This will also be logged in the homebridge logs.
+| Option | Required | Default | Description |
+|---|---|---|---|
+| `accessory` | ✅ | — | Must be exactly `"Honeywell Tuxedo Touch"` |
+| `host` | ✅ | — | IP address or hostname of the VAM unit. Use the local LAN IP where possible. |
+| `alarmCode` | ✅ | — | Your numeric alarm code for arming/disarming. |
+| `name` | | `"Honeywell Security"` | Display name shown in HomeKit. |
+| `port` | | _(none)_ | Port number if the VAM is not on the default HTTP port. |
+| `polling` | | `false` | Enables periodic polling to keep HomeKit in sync with state changes made outside of HomeKit. Recommended. |
+| `pollInterval` | | `30000` | How often to poll, in milliseconds. |
+| `keepaliveInterval` | | `60000` | How often the built-in keepalive pings the VAM unit, in milliseconds. Replaces any external ping/healthcheck. |
+| `fetchKeysBeforeEverySetCall` | | `false` | Forces a VAM session refresh before every arm/disarm command. Enable if commands intermittently fail. |
+| `debug` | | `false` | Enables verbose debug logging in the Homebridge log. |
+
+---
+
+## Upgrading from v1.x
+
+v2.0.0 is a breaking release due to Homebridge 2.0 requirements.
+
+**Requirements:**
+- Node.js **18.0.0 or later** (v1.x supported Node 10+)
+- Homebridge **1.8.0 or later**
+
+**What changed:**
+- Internally migrated from callback-based HAP handlers (`.on("get"/"set")`) to Promise-based handlers (`.onGet/.onSet`) required by Homebridge 2.0.
+- Removed unused dependencies (`crypto-js`, `node-html-parser`, `tough-cookie`, `util`).
+- All mutable plugin state is now scoped per-accessory instance, making it safe to run multiple accessories in the same Homebridge process.
+- The external keepalive/ping mechanism is now built into the plugin via `keepaliveInterval` — you can remove any cron jobs or scripts you were using for this.
+
+**Config changes:**
+- One new optional field: `keepaliveInterval` (milliseconds, default `60000`). All existing config fields are unchanged and remain compatible.
+
+---
+
+## Troubleshooting
+
+**Status always shows "Not Responding" in HomeKit**
+- Ensure "Authentication for web server local access" is disabled on the VAM unit (Settings → Accounts).
+- Confirm the `host` value in your config is reachable from the Homebridge machine: `ping <host>`.
+- Check Homebridge logs for `[_getAPIKeys]` or `[Keepalive]` error messages.
+
+**Arm/disarm commands don't work**
+- Double-check your `alarmCode` in the config.
+- Try enabling `fetchKeysBeforeEverySetCall: true` as a workaround for session expiry issues.
+
+**Unknown state logged**
+- If you see `Unknown alarm state: <X>` in the logs, please [open a GitHub issue](https://github.com/MaverickC2/homebridge-honeywell-vam/issues) with the state string so it can be added to the mapping.
+
+**Node TLS warning**
+```
+Warning: Setting the NODE_TLS_REJECT_UNAUTHORIZED environment variable to '0' makes TLS connections insecure...
+```
+This is expected. The VAM unit ships with expired certificates that cannot be updated. The plugin disables certificate verification to communicate with it.
+
+---
 
 ## FAQ
-- Node may throw the following warning
-  ```
-  Warning: Setting the NODE_TLS_REJECT_UNAUTHORIZED environment variable to '0' makes TLS connections and HTTPS requests insecure by disabling certificate verification.
-  ```
-  This is because the Tuxedo units come with really old certs which aren't trusted anymore, without any way to upgrade these certs, the workaround is to not check the cert.
-- Why is this not a platform accessory and/or why does it not support the other devices controlled by tuxedo? <br>
-  The tuxedo API has many bugs including a significant issue of not returning all devices controlled by the unit. The device api seems to only return the first device connected to the unit and not all. Given enough time and motivation, this can be achieved through the workaround of scraping the web interface.
+
+**Why does this use HTTP and not HTTPS?**
+The VAM unit only supports TLS 1.1, which has been removed from all modern runtimes. HTTP is the only practical option unless you run a TLS 1.1-capable reverse proxy in front of the unit.
+
+**Why is this not a platform plugin? Why doesn't it support lights/locks/etc. controlled by the VAM?**
+The VAM device API has a bug where it only returns the first connected device rather than all of them. Supporting additional devices would require scraping the VAM web interface, which is a significant undertaking.
+
+---
 
 ## Credits
-Forked from [https://github.com/lockpicker/homebridge-honeywell-tuxedo-touch](https://github.com/lockpicker/homebridge-honeywell-tuxedo-touch)
+
+Forked from [homebridge-honeywell-tuxedo-touch](https://github.com/lockpicker/homebridge-honeywell-tuxedo-touch) by lockpicker.
